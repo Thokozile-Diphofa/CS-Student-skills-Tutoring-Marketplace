@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 const universityDomains: Record<string, string[]> = {
   tut: ["tut4life.ac.za", "tut.ac.za"],
@@ -68,16 +71,83 @@ function validateUniversityEmail(email: string, university: string) {
 }
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [university, setUniversity] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState<"STUDENT" | "TUTOR">("STUDENT");
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const emailError = useMemo(() => validateUniversityEmail(email, university), [email, university]);
   const universityDomainHint = useMemo(() => {
     const domains = getAllowedDomains(university);
     return domains.length > 0 ? `Example: studentNumber@${domains[0]}` : "Use a university email ending in .ac.za";
   }, [university]);
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    if (!firstName.trim() || !lastName.trim() || !university.trim() || !email.trim() || !password) {
+      setErrorMessage("Please fill out all required fields.");
+      return;
+    }
+
+    if (emailError) {
+      setErrorMessage(emailError);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setErrorMessage("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          university: university.trim(),
+          email: email.trim(),
+          password,
+          role
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErrorMessage(data.error || "Registration failed.");
+        setLoading(false);
+        return;
+      }
+
+      setSuccessMessage("Registration successful! Redirecting to login...");
+      setTimeout(() => {
+        router.push("/login");
+      }, 1500);
+    } catch (err) {
+      console.error("Register network error:", err);
+      setErrorMessage(`Unable to connect to backend server at ${API_BASE_URL}. Please ensure the Express server is running ('npm start' in server folder).`);
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
@@ -120,7 +190,19 @@ export default function RegisterPage() {
                 <h2 className="mt-2 text-3xl font-bold text-slate-900">Join EasyLearning</h2>
               </div>
 
-              <form className="space-y-4">
+              {errorMessage && (
+                <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-600">
+                  {errorMessage}
+                </div>
+              )}
+
+              {successMessage && (
+                <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
+                  {successMessage}
+                </div>
+              )}
+
+              <form onSubmit={handleRegisterSubmit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <label htmlFor="firstName" className="mb-2 block text-sm font-medium text-slate-700">
@@ -129,8 +211,11 @@ export default function RegisterPage() {
                     <input
                       id="firstName"
                       type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
                       placeholder="First Name"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                      disabled={loading}
                     />
                   </div>
 
@@ -141,8 +226,11 @@ export default function RegisterPage() {
                     <input
                       id="lastName"
                       type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
                       placeholder="Last Name"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                      disabled={loading}
                     />
                   </div>
                 </div>
@@ -158,6 +246,7 @@ export default function RegisterPage() {
                     onChange={(event) => setUniversity(event.target.value)}
                     placeholder="TUT, UCT, Wits, UP..."
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                    disabled={loading}
                   />
                 </div>
 
@@ -174,6 +263,7 @@ export default function RegisterPage() {
                     className={`w-full rounded-xl border px-4 py-3 text-slate-900 outline-none transition focus:bg-white ${
                       emailError ? "border-red-300 bg-red-50 focus:border-red-400" : "border-slate-200 bg-slate-50 focus:border-amber-400"
                     }`}
+                    disabled={loading}
                   />
                   <p className="mt-2 text-xs text-slate-500">{universityDomainHint}</p>
                   {emailError ? <p className="mt-2 text-xs text-red-600">{emailError}</p> : null}
@@ -187,8 +277,11 @@ export default function RegisterPage() {
                     <input
                       id="password"
                       type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="Create a password"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-11 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                      disabled={loading}
                     />
                     <button
                       type="button"
@@ -208,8 +301,11 @@ export default function RegisterPage() {
                     <input
                       id="confirmPassword"
                       type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm your password"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-11 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                      disabled={loading}
                     />
                     <button
                       type="button"
@@ -224,12 +320,26 @@ export default function RegisterPage() {
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">Role</label>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-700">
-                      <input type="radio" name="role" defaultChecked className="h-4 w-4 accent-amber-500" />
+                    <label className={`flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer text-slate-700 ${role === "STUDENT" ? "border-amber-400 bg-amber-50/50 font-medium" : "border-slate-200 bg-slate-50"}`}>
+                      <input
+                        type="radio"
+                        name="role"
+                        checked={role === "STUDENT"}
+                        onChange={() => setRole("STUDENT")}
+                        className="h-4 w-4 accent-amber-500"
+                        disabled={loading}
+                      />
                       Student
                     </label>
-                    <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-700">
-                      <input type="radio" name="role" className="h-4 w-4 accent-amber-500" />
+                    <label className={`flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer text-slate-700 ${role === "TUTOR" ? "border-amber-400 bg-amber-50/50 font-medium" : "border-slate-200 bg-slate-50"}`}>
+                      <input
+                        type="radio"
+                        name="role"
+                        checked={role === "TUTOR"}
+                        onChange={() => setRole("TUTOR")}
+                        className="h-4 w-4 accent-amber-500"
+                        disabled={loading}
+                      />
                       Tutor
                     </label>
                   </div>
@@ -237,9 +347,10 @@ export default function RegisterPage() {
 
                 <button
                   type="submit"
-                  className="w-full rounded-xl bg-amber-400 px-4 py-3 font-semibold text-slate-900 transition hover:bg-amber-300"
+                  disabled={loading}
+                  className="w-full rounded-xl bg-amber-400 px-4 py-3 font-semibold text-slate-900 transition hover:bg-amber-300 disabled:opacity-50"
                 >
-                  Create Account
+                  {loading ? "Creating Account..." : "Create Account"}
                 </button>
               </form>
 
