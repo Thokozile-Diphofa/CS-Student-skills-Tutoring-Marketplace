@@ -54,10 +54,18 @@ export default function LoginPage() {
       }
 
       const roles: string[] = data.user?.roles || [];
+      const requestedPath = new URLSearchParams(window.location.search).get("next");
+      const safeRequestedPath = requestedPath?.startsWith("/")
+        && !requestedPath.startsWith("//")
+        && !requestedPath.includes("\\")
+        ? requestedPath
+        : null;
       if (roles.includes("ADMIN")) {
         router.push("/dashboard/admin");
       } else if (roles.includes("TUTOR")) {
         router.push("/dashboard/tutor");
+      } else if (safeRequestedPath) {
+        router.push(safeRequestedPath);
       } else {
         router.push("/dashboard/student");
       }

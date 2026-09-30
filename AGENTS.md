@@ -87,10 +87,29 @@ an arbitrary user pair.
 
 ## 6. API contracts
 
-Not committed yet. Pin exact route paths + HTTP methods here as each sprint's endpoints are
-implemented (auth in Sprint 2, profile in Sprint 3, discovery in Sprint 4, requests/
-notifications in Sprint 5, messaging in Sprint 6, booking in Sprint 7, reviews/reports in
-Sprints 8–9), and keep this section in sync with the code as it grows.
+Implemented authentication routes:
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me` (authenticated)
+- `POST /api/auth/upgrade-tutor` (authenticated)
+- `POST /api/auth/logout`
+
+Implemented tutor profile and discovery routes:
+- `GET /api/tutors` (public search/list)
+- `GET /api/tutors/:id` (public tutor profile)
+- `GET /api/tutors/profile` (authenticated; requires `TUTOR`)
+- `PUT /api/tutors/profile` (authenticated; requires `TUTOR`)
+
+Implemented tutor application routes:
+- `GET /api/tutor-applications/subjects` (authenticated)
+- `GET /api/tutor-applications/me` (authenticated)
+- `POST /api/tutor-applications` (authenticated)
+- `GET /api/tutor-applications` (authenticated; requires `ADMIN`)
+- `PATCH /api/tutor-applications/:id/review` (authenticated; requires `ADMIN`)
+
+Email verification, session-request, notification, messaging, booking, review, and
+reporting routes are not implemented yet. Keep this section in sync as future endpoints
+are added.
 
 ## 7. Security
 

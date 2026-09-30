@@ -30,3 +30,27 @@ CREATE TABLE IF NOT EXISTS tutor_skills (
   skill_name VARCHAR(100) NOT NULL,
   UNIQUE(user_id, skill_name)
 );
+
+CREATE TABLE IF NOT EXISTS tutor_applications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  student_number VARCHAR(80),
+  programme VARCHAR(200),
+  year_of_study SMALLINT CHECK (year_of_study BETWEEN 1 AND 12),
+  motivation TEXT,
+  experience TEXT,
+  skills_description TEXT,
+  subjects TEXT[] NOT NULL DEFAULT '{}',
+  proposed_hourly_rate NUMERIC(10, 2) CHECK (proposed_hourly_rate > 0),
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+    CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
+  application_source VARCHAR(20) NOT NULL DEFAULT 'USER'
+    CHECK (application_source IN ('USER', 'LEGACY')),
+  email_verified_at TIMESTAMP WITH TIME ZONE,
+  submitted_at TIMESTAMP WITH TIME ZONE,
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  rejection_reason TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

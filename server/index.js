@@ -5,19 +5,22 @@ require("dotenv").config();
 
 const authRoutes = require("./routes/auth");
 const tutorRoutes = require("./routes/tutors");
+const tutorApplicationRoutes = require("./routes/tutorApplications");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
+const CLIENT_URL = (process.env.CLIENT_URL || "http://localhost:3000").replace(/\/$/, "");
 
 // Dynamic CORS configuration for local development and specified client URL
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || origin === CLIENT_URL || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      const isLocalDevelopmentOrigin = process.env.NODE_ENV !== "production"
+        && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || "");
+      if (!origin || origin === CLIENT_URL || isLocalDevelopmentOrigin) {
         callback(null, true);
       } else {
-        callback(null, true);
+        callback(new Error("Origin is not allowed by CORS."));
       }
     },
     credentials: true
@@ -29,6 +32,7 @@ app.use(cookieParser());
 
 // API Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/tutor-applications", tutorApplicationRoutes);
 app.use("/api/tutors", tutorRoutes);
 
 // Test routes

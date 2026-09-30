@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { getEffectiveRoles } = require("../services/tutorApplications");
 
 function authenticateToken(req, res, next) {
   const tokenFromCookie = req.cookies && req.cookies.token;
@@ -13,21 +14,19 @@ function authenticateToken(req, res, next) {
 
   const jwtSecret = process.env.JWT_SECRET || "easylearning_default_secret_key_change_in_prod";
 
-  jwt.verify(token, jwtSecret, (err, decoded) => {
+  jwt.verify(token, jwtSecret, async (err, decoded) => {
     if (err) {
       return res.status(401).json({ error: "Invalid or expired authentication token" });
     }
 
-    // Support both multi-role array and legacy single role
-    const roles = Array.isArray(decoded.roles)
-      ? decoded.roles
-      : (decoded.role ? [decoded.role] : []);
-
-    req.user = {
-      ...decoded,
-      roles
-    };
-    next();
+    try {
+      const roles = await getEffectiveRoles(decoded.id);
+      req.user = { ...decoded, roles };
+      next();
+    } catch (error) {
+      console.error("Role lookup error:", error);
+      return res.status(500).json({ error: "Unable to verify account permissions." });
+    }
   });
 }
 

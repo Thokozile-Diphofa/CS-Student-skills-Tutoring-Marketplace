@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import DashboardShell from "../../components/DashboardShell";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -15,138 +15,209 @@ interface UserProfile {
   roles: string[];
 }
 
+interface TutorProfile {
+  id: number;
+  firstName: string;
+  lastName: string;
+  university: string;
+  email: string;
+  headline: string | null;
+  bio: string | null;
+  hourlyRate: number;
+  subjects: string[];
+}
+
+interface OverviewMetricProps {
+  label: string;
+  value: string | number;
+  detail: string;
+}
+
+function OverviewMetric({ label, value, detail }: OverviewMetricProps) {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <p className="mt-3 text-2xl font-bold text-slate-950">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
+    </section>
+  );
+}
+
 export default function TutorDashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<TutorProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
+  const [profileError, setProfileError] = useState("");
 
   useEffect(() => {
-    async function checkAuth() {
+    let cancelled = false;
+
+    async function loadDashboard() {
+      let authenticated = false;
       try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        const authResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
           method: "GET",
           credentials: "include"
         });
 
-        if (!response.ok) {
-          router.push("/login");
+        if (authResponse.status === 401) {
+          router.replace("/login");
           return;
         }
+        if (!authResponse.ok) throw new Error("Unable to verify your account.");
 
-        const data = await response.json();
-        const roles: string[] = data.user?.roles || [];
+        const authData = await authResponse.json();
+        const authenticatedUser: UserProfile | null = authData.user || null;
+        const roles = authenticatedUser?.roles || [];
 
         if (!roles.includes("TUTOR")) {
-          if (roles.includes("STUDENT")) router.push("/dashboard/student");
-          else if (roles.includes("ADMIN")) router.push("/dashboard/admin");
-          else router.push("/login");
+          if (roles.includes("STUDENT")) router.replace("/dashboard/student");
+          else if (roles.includes("ADMIN")) router.replace("/dashboard/admin");
+          else router.replace("/login");
           return;
         }
 
-        setUser(data.user);
-      } catch (err) {
-        console.error("Auth check failed:", err);
-        router.push("/login");
+        if (cancelled || !authenticatedUser) return;
+        authenticated = true;
+        setUser(authenticatedUser);
+
+        const profileResponse = await fetch(`${API_BASE_URL}/api/tutors/profile`, {
+          credentials: "include"
+        });
+        if (!profileResponse.ok) throw new Error("Tutor profile could not be loaded.");
+        const profileData = await profileResponse.json();
+        if (!cancelled) setProfile(profileData.tutor || null);
+      } catch (error) {
+        console.error("Tutor dashboard request failed:", error);
+        if (!cancelled) {
+          if (authenticated) setProfileError("Your tutor profile could not be loaded. Please try again later.");
+          else setAuthError("We could not verify your account. Please try again.");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setProfileLoading(false);
+        }
       }
     }
 
-    checkAuth();
+    void loadDashboard();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  const handleLogout = async () => {
-    try {
-      await fetch(`${API_BASE_URL}/api/auth/logout`, {
-        method: "POST",
-        credentials: "include"
-      });
-    } catch (err) {
-      console.error("Logout request error:", err);
-    } finally {
-      localStorage.clear();
-      router.push("/login");
-    }
-  };
-
-  if (loading) {
+  if (loading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600">
-        <p className="text-lg font-medium">Loading Tutor Dashboard...</p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-600">
+        <p className="text-sm font-medium" role={authError ? "alert" : "status"}>
+          {authError || "Verifying your tutor account..."}
+        </p>
       </div>
     );
   }
 
-  const isDualRole = user?.roles.includes("STUDENT");
-
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="bg-slate-950 text-white border-b border-slate-800">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-lg font-black text-slate-950">
-              E
-            </div>
-            <span className="text-xl font-bold tracking-tight">EasyLearning</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="rounded-full bg-emerald-400/10 border border-emerald-400/30 px-3 py-1 text-xs font-bold text-emerald-400">
-              {isDualRole ? "STUDENT & TUTOR" : "TUTOR ROLE"}
-            </span>
-
-            {isDualRole ? (
-              <Link
-                href="/dashboard/student"
-                className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-bold text-amber-400 transition hover:bg-amber-500/20"
-              >
-                Switch to Student Dashboard →
-              </Link>
-            ) : null}
-
-            <button
-              onClick={handleLogout}
-              className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 hover:border-slate-600"
-            >
-              Logout
-            </button>
-          </div>
+    <DashboardShell role="TUTOR" activeItem="Dashboard" user={user}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-emerald-700">Tutor Dashboard</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Welcome back, {user.firstName}</h1>
+          <p className="mt-2 text-sm text-slate-600">Your tutoring profile and activity.</p>
         </div>
-      </header>
+        <p className="text-sm font-medium text-slate-500">{user.university}</p>
+      </div>
 
-      <main className="mx-auto max-w-5xl px-6 py-12">
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-6">
+      <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <OverviewMetric
+          label="Pending Requests"
+          value="Not available"
+          detail="The session-request feature has not been implemented."
+        />
+        <OverviewMetric
+          label="Accepted Requests"
+          value="Not available"
+          detail="Request statuses are not available yet."
+        />
+        <OverviewMetric
+          label="Subjects Offered"
+          value={profileLoading ? "Loading" : profileError ? "Unavailable" : profile?.subjects.length ?? 0}
+          detail="Subjects listed on your tutoring profile."
+        />
+      </div>
+
+      <div className="mt-7 grid gap-5 lg:grid-cols-3">
+        <section id="profile" className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-6 lg:col-span-2">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-5">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900">Tutor Dashboard</h1>
-              <p className="mt-1 text-slate-600">Welcome back, {user?.firstName} {user?.lastName}</p>
+              <h2 className="text-lg font-bold text-slate-950">My Tutoring Profile</h2>
+              <p className="mt-1 text-sm text-slate-600">Profile details currently stored for your tutor account.</p>
             </div>
-            <span className="rounded-full bg-slate-100 px-4 py-1.5 text-sm font-semibold text-slate-700">
-              {user?.university}
-            </span>
+            {profile && <p className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">{profile.university}</p>}
           </div>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-emerald-600">Tutor Credentials</h2>
-              <div className="mt-4 space-y-2 text-sm text-slate-700">
-                <p><strong className="text-slate-900">User ID:</strong> #{user?.id}</p>
-                <p><strong className="text-slate-900">Name:</strong> {user?.firstName} {user?.lastName}</p>
-                <p><strong className="text-slate-900">Email:</strong> {user?.email}</p>
-                <p><strong className="text-slate-900">University:</strong> {user?.university}</p>
-                <p><strong className="text-slate-900">Assigned Roles:</strong> {user?.roles.join(", ")}</p>
+          {profileLoading ? (
+            <p className="py-6 text-sm text-slate-500" role="status">Loading your tutor profile...</p>
+          ) : profileError ? (
+            <p className="py-6 text-sm text-red-700" role="alert">{profileError}</p>
+          ) : profile ? (
+            <div className="pt-5">
+              <h3 className="text-base font-semibold text-slate-900">{profile.firstName} {profile.lastName}</h3>
+              <p className="mt-1 break-all text-sm text-slate-600">{profile.email}</p>
+              {profile.headline && <p className="mt-5 text-sm font-semibold text-slate-800">{profile.headline}</p>}
+              <div className="mt-5">
+                <h3 className="text-xs font-bold uppercase text-slate-500">About</h3>
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">
+                  {profile.bio || "No bio is listed on your tutor profile."}
+                </p>
+              </div>
+              <div className="mt-5">
+                <h3 className="text-xs font-bold uppercase text-slate-500">Subjects</h3>
+                {profile.subjects.length > 0 ? (
+                  <ul className="mt-2 flex flex-wrap gap-2">
+                    {profile.subjects.map((subject) => (
+                      <li key={subject} className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                        {subject}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-600">No subjects are listed on your tutor profile.</p>
+                )}
               </div>
             </div>
+          ) : (
+            <p className="py-6 text-sm text-slate-600">Tutor profile information is not available.</p>
+          )}
+        </section>
 
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-emerald-700">Peer Tutor Active</h2>
-              <p className="mt-2 text-sm text-emerald-900">
-                Peer Tutor privileges active. Single account holds both Student and Tutor roles.
-              </p>
-            </div>
-          </div>
+        <section className="rounded-xl border border-slate-200 bg-white p-6">
+          <h2 className="text-lg font-bold text-slate-950">Rate</h2>
+          {profileLoading ? (
+            <p className="mt-4 text-sm text-slate-500" role="status">Loading rate...</p>
+          ) : profileError ? (
+            <p className="mt-4 text-sm text-slate-600">Rate unavailable.</p>
+          ) : profile ? (
+            <p className="mt-3 text-2xl font-bold text-amber-700">R{profile.hourlyRate.toFixed(2)} <span className="text-sm font-medium text-slate-500">/ hour</span></p>
+          ) : (
+            <p className="mt-4 text-sm text-slate-600">Rate unavailable.</p>
+          )}
+          <p className="mt-4 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">
+            This is the rate currently stored in your tutor profile.
+          </p>
+        </section>
+      </div>
+
+      <section id="requests" className="mt-7 scroll-mt-6 rounded-xl border border-slate-200 bg-white p-6">
+        <h2 className="text-lg font-bold text-slate-950">Session Requests</h2>
+        <div className="mt-4 border-l-2 border-emerald-500 pl-4">
+          <p className="text-sm font-semibold text-slate-800">Session requests are not available yet.</p>
+          <p className="mt-1 text-sm leading-6 text-slate-600">There is no request API to check incoming requests or accept/decline status.</p>
         </div>
-      </main>
-    </div>
+      </section>
+    </DashboardShell>
   );
 }

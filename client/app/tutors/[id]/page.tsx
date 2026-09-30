@@ -51,8 +51,8 @@ export default function TutorProfilePage({ params }: { params: Promise<{ id: str
 
         const data = await response.json();
         setTutor(data.tutor || null);
-      } catch (err: any) {
-        console.error("Error fetching tutor profile:", err);
+      } catch (error: unknown) {
+        console.error("Error fetching tutor profile:", error);
         setError("Unable to connect to server. Please check backend connection.");
       } finally {
         setLoading(false);

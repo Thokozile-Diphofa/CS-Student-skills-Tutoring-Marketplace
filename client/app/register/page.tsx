@@ -80,7 +80,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<"STUDENT" | "TUTOR">("STUDENT");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -112,6 +111,7 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
+    const tutorIntent = new URLSearchParams(window.location.search).get("intent") === "tutor";
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
@@ -126,7 +126,7 @@ export default function RegisterPage() {
           university: university.trim(),
           email: email.trim(),
           password,
-          role
+          role: "STUDENT"
         })
       });
 
@@ -138,9 +138,11 @@ export default function RegisterPage() {
         return;
       }
 
-      setSuccessMessage("Registration successful! Redirecting to login...");
+      setSuccessMessage(tutorIntent
+        ? "Account created. Continuing to your tutor application..."
+        : "Registration successful! Redirecting to login...");
       setTimeout(() => {
-        router.push("/login");
+        router.push(tutorIntent ? "/tutor/application" : "/login");
       }, 1500);
     } catch (err) {
       console.error("Register network error:", err);
@@ -175,8 +177,8 @@ export default function RegisterPage() {
                     <p className="mt-1 text-xs text-slate-300">Find tutors and book support.</p>
                   </div>
                   <div className="rounded-xl bg-slate-800 p-3">
-                    <p className="font-semibold text-white">Tutor</p>
-                    <p className="mt-1 text-xs text-slate-300">Share your skills and help others.</p>
+                    <p className="font-semibold text-white">Tutor applicant</p>
+                    <p className="mt-1 text-xs text-slate-300">Apply for tutor access after creating a student account.</p>
                   </div>
                 </div>
               </div>
@@ -318,31 +320,10 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Role</label>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className={`flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer text-slate-700 ${role === "STUDENT" ? "border-amber-400 bg-amber-50/50 font-medium" : "border-slate-200 bg-slate-50"}`}>
-                      <input
-                        type="radio"
-                        name="role"
-                        checked={role === "STUDENT"}
-                        onChange={() => setRole("STUDENT")}
-                        className="h-4 w-4 accent-amber-500"
-                        disabled={loading}
-                      />
-                      Student
-                    </label>
-                    <label className={`flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer text-slate-700 ${role === "TUTOR" ? "border-amber-400 bg-amber-50/50 font-medium" : "border-slate-200 bg-slate-50"}`}>
-                      <input
-                        type="radio"
-                        name="role"
-                        checked={role === "TUTOR"}
-                        onChange={() => setRole("TUTOR")}
-                        className="h-4 w-4 accent-amber-500"
-                        disabled={loading}
-                      />
-                      Tutor
-                    </label>
-                  </div>
+                  <p className="text-sm font-medium text-slate-700">Student account</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Every account starts as a student. Apply separately to tutor after creating your account.
+                  </p>
                 </div>
 
                 <button

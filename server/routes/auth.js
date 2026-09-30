@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../db");
 const { authenticateToken } = require("../middleware/auth");
+const { getEffectiveRoles } = require("../services/tutorApplications");
 
 const router = express.Router();
 
@@ -55,8 +56,7 @@ async function ensureSchema() {
 
 // Helper to fetch user roles array
 async function getUserRoles(userId) {
-  const result = await db.query("SELECT role FROM user_roles WHERE user_id = $1 ORDER BY role ASC", [userId]);
-  return result.rows.map(row => row.role);
+  return getEffectiveRoles(userId);
 }
 
 // Helper to issue JWT and set HttpOnly Cookie
@@ -73,7 +73,7 @@ function setAuthCookie(res, user, roles) {
   res.cookie("token", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   });
 
@@ -119,18 +119,11 @@ router.post("/register", async (req, res) => {
 
     const newUser = insertResult.rows[0];
 
-    // Assign roles: New TUTOR is also assigned STUDENT role
+    // Tutor intent never grants Tutor access; all public accounts start as Students.
     await db.query(
       `INSERT INTO user_roles (user_id, role) VALUES ($1, 'STUDENT') ON CONFLICT DO NOTHING;`,
       [newUser.id]
     );
-
-    if (targetRole === "TUTOR") {
-      await db.query(
-        `INSERT INTO user_roles (user_id, role) VALUES ($1, 'TUTOR') ON CONFLICT DO NOTHING;`,
-        [newUser.id]
-      );
-    }
 
     const roles = await getUserRoles(newUser.id);
     setAuthCookie(res, newUser, roles);
@@ -242,13 +235,11 @@ router.get("/me", authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/auth/upgrade-tutor (Authenticated endpoint for existing users to become tutors)
+// POST /api/auth/upgrade-tutor (Legacy endpoint; Tutor access now requires approval)
 router.post("/upgrade-tutor", authenticateToken, async (req, res) => {
   try {
     await ensureSchema();
     const userId = req.user.id;
-
-    // Fetch user details
     const userResult = await db.query(
       "SELECT id, first_name, last_name, university, email FROM users WHERE id = $1",
       [userId]
@@ -262,40 +253,12 @@ router.post("/upgrade-tutor", authenticateToken, async (req, res) => {
     const currentRoles = await getUserRoles(userId);
 
     if (currentRoles.includes("TUTOR")) {
-      return res.status(200).json({
-        message: "Your account is already registered as a tutor.",
-        user: {
-          id: user.id,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          university: user.university,
-          email: user.email,
-          roles: currentRoles
-        }
-      });
+      return res.json({ message: "Your Tutor application has been approved." });
     }
 
-    // Add TUTOR role to user_roles
-    await db.query(
-      "INSERT INTO user_roles (user_id, role) VALUES ($1, 'TUTOR') ON CONFLICT DO NOTHING",
-      [userId]
-    );
-
-    const updatedRoles = await getUserRoles(userId);
-
-    // Re-issue JWT cookie with updated roles
-    setAuthCookie(res, user, updatedRoles);
-
-    return res.json({
-      message: "Account successfully upgraded to Tutor.",
-      user: {
-        id: user.id,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        university: user.university,
-        email: user.email,
-        roles: updatedRoles
-      }
+    return res.status(409).json({
+      error: "Tutor access requires an approved application.",
+      applicationUrl: "/tutor/application"
     });
   } catch (error) {
     console.error("Upgrade tutor error:", error);
@@ -308,7 +271,7 @@ router.post("/logout", (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax"
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
   });
   return res.json({ message: "Logout successful" });
 });

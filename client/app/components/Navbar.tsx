@@ -14,6 +14,7 @@ export default function Navbar() {
         <div className="hidden items-center gap-8 text-sm font-medium text-slate-300 md:flex">
           <Link href="/" className="transition hover:text-white">Home</Link>
           <Link href="/tutors" className="transition hover:text-white font-semibold text-amber-400">Find Tutors</Link>
+          <Link href="/become-a-tutor" className="transition hover:text-white">Become a Tutor</Link>
           <Link href="/#how-it-works" className="transition hover:text-white">How It Works</Link>
           <Link href="/login" className="transition hover:text-white">Login</Link>
           <Link href="/register" className="transition hover:text-white">Register</Link>
@@ -21,10 +22,10 @@ export default function Navbar() {
 
         <div className="flex items-center gap-3">
           <Link
-            href="/tutors"
+            href="/become-a-tutor"
             className="rounded-full bg-slate-900 border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800"
           >
-            Find Tutors
+            Become a Tutor
           </Link>
           <Link
             href="/login"

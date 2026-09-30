@@ -1,11 +1,13 @@
 const express = require("express");
 const db = require("../db");
 const { authenticateToken, requireRole } = require("../middleware/auth");
+const { ensureTutorApplicationSchema } = require("../services/tutorApplications");
 
 const router = express.Router();
 
 let schemaInitialized = false;
 async function ensureTutorSchema() {
+  await ensureTutorApplicationSchema();
   if (schemaInitialized) return;
   try {
     await db.query(`
@@ -31,6 +33,10 @@ async function ensureTutorSchema() {
     const tutorsWithoutProfile = await db.query(`
       SELECT ur.user_id
       FROM user_roles ur
+      INNER JOIN tutor_applications ta
+        ON ta.user_id = ur.user_id
+        AND ta.status = 'APPROVED'
+        AND ta.email_verified_at IS NOT NULL
       LEFT JOIN tutor_profiles tp ON ur.user_id = tp.user_id
       WHERE ur.role = 'TUTOR' AND tp.user_id IS NULL
     `);
@@ -78,6 +84,10 @@ router.get("/", async (req, res) => {
         ) as subjects
       FROM users u
       INNER JOIN user_roles ur ON u.id = ur.user_id AND ur.role = 'TUTOR'
+      INNER JOIN tutor_applications ta
+        ON ta.user_id = u.id
+        AND ta.status = 'APPROVED'
+        AND ta.email_verified_at IS NOT NULL
       LEFT JOIN tutor_profiles tp ON u.id = tp.user_id
       LEFT JOIN tutor_skills ts ON u.id = ts.user_id
       WHERE 1=1
@@ -140,6 +150,56 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET /api/tutors/profile (Authenticated endpoint for the current tutor)
+router.get("/profile", authenticateToken, requireRole("TUTOR"), async (req, res) => {
+  try {
+    await ensureTutorSchema();
+
+    const result = await db.query(`
+      SELECT
+        u.id,
+        u.first_name,
+        u.last_name,
+        u.university,
+        u.email,
+        tp.headline,
+        tp.bio,
+        tp.hourly_rate,
+        COALESCE(
+          json_agg(DISTINCT ts.skill_name) FILTER (WHERE ts.skill_name IS NOT NULL),
+          '[]'::json
+        ) as subjects
+      FROM users u
+      INNER JOIN tutor_profiles tp ON tp.user_id = u.id
+      LEFT JOIN tutor_skills ts ON ts.user_id = u.id
+      WHERE u.id = $1
+      GROUP BY u.id, tp.headline, tp.bio, tp.hourly_rate
+    `, [req.user.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Tutor profile not found." });
+    }
+
+    const row = result.rows[0];
+    return res.json({
+      tutor: {
+        id: row.id,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        university: row.university,
+        email: row.email,
+        headline: row.headline,
+        bio: row.bio,
+        hourlyRate: Number(row.hourly_rate),
+        subjects: Array.isArray(row.subjects) ? row.subjects : []
+      }
+    });
+  } catch (error) {
+    console.error("Fetch current tutor profile error:", error);
+    return res.status(500).json({ error: "Server error retrieving tutor profile." });
+  }
+});
+
 // GET /api/tutors/:id (Public endpoint for single tutor profile)
 router.get("/:id", async (req, res) => {
   try {
@@ -166,6 +226,10 @@ router.get("/:id", async (req, res) => {
         ) as subjects
       FROM users u
       INNER JOIN user_roles ur ON u.id = ur.user_id AND ur.role = 'TUTOR'
+      INNER JOIN tutor_applications ta
+        ON ta.user_id = u.id
+        AND ta.status = 'APPROVED'
+        AND ta.email_verified_at IS NOT NULL
       LEFT JOIN tutor_profiles tp ON u.id = tp.user_id
       LEFT JOIN tutor_skills ts ON u.id = ts.user_id
       WHERE u.id = $1

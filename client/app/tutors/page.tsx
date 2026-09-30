@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -31,7 +31,7 @@ export default function TutorsSearchPage() {
   const [selectedSubject, setSelectedSubject] = useState("All");
   const [selectedUniversity, setSelectedUniversity] = useState("All");
 
-  const fetchTutors = async () => {
+  const fetchTutors = useEffectEvent(async () => {
     setLoading(true);
     setError("");
 
@@ -52,17 +52,17 @@ export default function TutorsSearchPage() {
 
       const data = await response.json();
       setTutors(data.tutors || []);
-    } catch (err: any) {
-      console.error("Error fetching tutors:", err);
+    } catch (error: unknown) {
+      console.error("Error fetching tutors:", error);
       setError("Unable to retrieve tutor listings. Please check backend connection.");
     } finally {
       setLoading(false);
     }
-  };
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchTutors();
+      void fetchTutors();
     }, 300);
 
     return () => clearTimeout(timer);
@@ -185,7 +185,7 @@ export default function TutorsSearchPage() {
               </div>
               <h3 className="mt-4 text-lg font-bold text-slate-900">No tutors found</h3>
               <p className="mt-1 text-sm text-slate-600">
-                We couldn't find any peer tutors matching your search or filters.
+                We couldn&apos;t find any peer tutors matching your search or filters.
               </p>
               <button
                 onClick={() => {
