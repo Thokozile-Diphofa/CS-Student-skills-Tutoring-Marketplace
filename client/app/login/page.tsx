@@ -6,6 +6,16 @@ import { useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
+type LoginResponse = {
+  error?: string;
+  user?: {
+    roles?: string[];
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+  };
+};
+
 export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
@@ -25,8 +35,10 @@ export default function LoginPage() {
 
     setLoading(true);
 
+    let response: Response;
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -38,49 +50,56 @@ export default function LoginPage() {
         })
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        setErrorMessage(data.error || "Login failed. Please check your credentials.");
-        setLoading(false);
-        return;
-      }
-
-      if (data.user) {
-        const rolesArray = data.user.roles || [];
-        localStorage.setItem("user_roles", JSON.stringify(rolesArray));
-        localStorage.setItem("user_email", data.user.email);
-        localStorage.setItem("user_name", `${data.user.firstName} ${data.user.lastName}`);
-      }
-
-      const roles: string[] = data.user?.roles || [];
-      const requestedPath = new URLSearchParams(window.location.search).get("next");
-      const safeRequestedPath = requestedPath?.startsWith("/")
-        && !requestedPath.startsWith("//")
-        && !requestedPath.includes("\\")
-        ? requestedPath
-        : null;
-      if (roles.includes("ADMIN")) {
-        router.push("/dashboard/admin");
-      } else if (roles.includes("TUTOR")) {
-        router.push("/dashboard/tutor");
-      } else if (safeRequestedPath) {
-        router.push(safeRequestedPath);
-      } else {
-        router.push("/dashboard/student");
-      }
     } catch (err) {
       console.error("Login network error:", err);
       setErrorMessage(`Unable to connect to backend server at ${API_BASE_URL}. Please ensure the Express server is running ('npm start' in server folder).`);
       setLoading(false);
+      return;
+    }
+
+    const data = await response.json().catch(() => null) as LoginResponse | null;
+
+    if (!response.ok) {
+      setErrorMessage(data?.error || "Login failed. Please check your credentials.");
+      setLoading(false);
+      return;
+    }
+
+    if (!data?.user) {
+      setErrorMessage("The server returned an invalid login response. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    const rolesArray = Array.isArray(data.user.roles) ? data.user.roles : [];
+    localStorage.setItem("user_roles", JSON.stringify(rolesArray));
+    if (data.user.email) {
+      localStorage.setItem("user_email", data.user.email);
+    }
+    localStorage.setItem("user_name", `${data.user.firstName || ""} ${data.user.lastName || ""}`.trim());
+
+    const requestedPath = new URLSearchParams(window.location.search).get("next");
+    const safeRequestedPath = requestedPath?.startsWith("/")
+      && !requestedPath.startsWith("//")
+      && !requestedPath.includes("\\")
+      ? requestedPath
+      : null;
+    if (rolesArray.includes("ADMIN")) {
+      router.push("/dashboard/admin");
+    } else if (rolesArray.includes("TUTOR")) {
+      router.push("/dashboard/tutor");
+    } else if (safeRequestedPath) {
+      router.push(safeRequestedPath);
+    } else {
+      router.push("/dashboard/student");
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-6xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-        <div className="grid min-h-[760px] lg:grid-cols-2">
-          <div className="flex items-center justify-center bg-slate-950 px-6 py-12 text-white md:px-10">
+        <div className="grid lg:min-h-[680px] lg:grid-cols-2">
+          <div className="flex items-center justify-center bg-slate-950 px-5 py-9 text-white sm:px-10 sm:py-12">
             <div className="max-w-md">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400 text-lg font-black text-slate-950">
@@ -89,7 +108,7 @@ export default function LoginPage() {
                 <span className="text-2xl font-bold">EasyLearning</span>
               </div>
 
-              <h1 className="mt-10 text-4xl font-bold tracking-tight">Welcome back</h1>
+              <h1 className="mt-8 text-3xl font-bold tracking-tight sm:mt-10 sm:text-4xl">Welcome back</h1>
               <p className="mt-4 text-base text-slate-300">
                 Continue learning with student tutors who understand your course goals and academic journey.
               </p>
@@ -107,7 +126,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-center bg-white px-6 py-10 md:px-10">
+          <div className="flex items-center justify-center bg-white px-5 py-9 sm:px-10 sm:py-12">
             <div className="w-full max-w-md">
               <div className="mb-8">
                 <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-600">Login</p>
@@ -115,7 +134,7 @@ export default function LoginPage() {
               </div>
 
               {errorMessage && (
-                <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-600">
+                <div className="mb-6 break-words rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-600">
                   {errorMessage}
                 </div>
               )}
@@ -160,7 +179,7 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-4 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm">
                   <label className="flex items-center gap-2 text-slate-600">
                     <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400" />
                     Remember me
