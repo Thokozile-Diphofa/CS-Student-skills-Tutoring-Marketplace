@@ -4,6 +4,7 @@ const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
 const authRoutes = require("./routes/auth");
+const adminRoutes = require("./routes/admin");
 const tutorRoutes = require("./routes/tutors");
 const tutorApplicationRoutes = require("./routes/tutorApplications");
 
@@ -32,6 +33,7 @@ app.use(cookieParser());
 
 // API Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/tutor-applications", tutorApplicationRoutes);
 app.use("/api/tutors", tutorRoutes);
 

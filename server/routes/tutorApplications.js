@@ -243,11 +243,6 @@ router.patch("/:id/review", authenticateToken, requireRole("ADMIN"), async (req,
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "This application has already been reviewed." });
     }
-    if (status === "APPROVED" && !application.email_verified_at) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ error: "Email verification is required before approval." });
-    }
-
     if (status === "APPROVED") {
       await client.query(
         "INSERT INTO user_roles (user_id, role) VALUES ($1, 'STUDENT') ON CONFLICT DO NOTHING",

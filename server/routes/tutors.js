@@ -36,7 +36,6 @@ async function ensureTutorSchema() {
       INNER JOIN tutor_applications ta
         ON ta.user_id = ur.user_id
         AND ta.status = 'APPROVED'
-        AND ta.email_verified_at IS NOT NULL
       LEFT JOIN tutor_profiles tp ON ur.user_id = tp.user_id
       WHERE ur.role = 'TUTOR' AND tp.user_id IS NULL
     `);
@@ -87,7 +86,6 @@ router.get("/", async (req, res) => {
       INNER JOIN tutor_applications ta
         ON ta.user_id = u.id
         AND ta.status = 'APPROVED'
-        AND ta.email_verified_at IS NOT NULL
       LEFT JOIN tutor_profiles tp ON u.id = tp.user_id
       LEFT JOIN tutor_skills ts ON u.id = ts.user_id
       WHERE 1=1
@@ -229,7 +227,6 @@ router.get("/:id", async (req, res) => {
       INNER JOIN tutor_applications ta
         ON ta.user_id = u.id
         AND ta.status = 'APPROVED'
-        AND ta.email_verified_at IS NOT NULL
       LEFT JOIN tutor_profiles tp ON u.id = tp.user_id
       LEFT JOIN tutor_skills ts ON u.id = ts.user_id
       WHERE u.id = $1

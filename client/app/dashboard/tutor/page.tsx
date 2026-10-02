@@ -212,10 +212,10 @@ export default function TutorDashboardPage() {
       </div>
 
       <section id="requests" className="mt-7 scroll-mt-6 rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="text-lg font-bold text-slate-950">Session Requests</h2>
+        <h2 className="text-lg font-bold text-slate-950">Incoming Requests</h2>
         <div className="mt-4 border-l-2 border-emerald-500 pl-4">
-          <p className="text-sm font-semibold text-slate-800">Session requests are not available yet.</p>
-          <p className="mt-1 text-sm leading-6 text-slate-600">There is no request API to check incoming requests or accept/decline status.</p>
+          <p className="text-sm font-semibold text-slate-800">Requests students send to you will appear here.</p>
+          <p className="mt-1 text-sm leading-6 text-slate-600">Request tracking and accept/decline actions are not available yet.</p>
         </div>
       </section>
     </DashboardShell>

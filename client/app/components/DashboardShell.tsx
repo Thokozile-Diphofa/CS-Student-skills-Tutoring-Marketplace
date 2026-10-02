@@ -25,13 +25,13 @@ const navigationByRole = {
   STUDENT: [
     { label: "Dashboard", href: "/dashboard/student" },
     { label: "Find Tutors", href: "/tutors" },
-    { label: "My Requests", href: "#requests" },
+    { label: "My Session Requests", href: "#requests" },
     { label: "Profile", href: "#profile" }
   ],
   TUTOR: [
     { label: "Dashboard", href: "/dashboard/tutor" },
     { label: "My Profile", href: "#profile" },
-    { label: "Session Requests", href: "#requests" }
+    { label: "Incoming Requests", href: "#requests" }
   ]
 } satisfies Record<DashboardRole, { label: string; href: string }[]>;
 

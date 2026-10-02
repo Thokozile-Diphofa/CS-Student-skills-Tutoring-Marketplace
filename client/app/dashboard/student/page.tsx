@@ -161,10 +161,10 @@ export default function StudentDashboardPage() {
         </section>
 
         <section id="requests" className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-bold text-slate-950">My Requests</h2>
+          <h2 className="text-lg font-bold text-slate-950">My Session Requests</h2>
           <div className="mt-4 border-l-2 border-amber-400 pl-4">
-            <p className="text-sm font-semibold text-slate-800">Tutoring requests are not available yet.</p>
-            <p className="mt-1 text-sm leading-6 text-slate-600">There is no request API to check for existing requests or statuses.</p>
+            <p className="text-sm font-semibold text-slate-800">Requests you send to tutors will appear here.</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">Request tracking is not available yet, so sent requests and their statuses cannot be loaded.</p>
           </div>
         </section>
       </div>

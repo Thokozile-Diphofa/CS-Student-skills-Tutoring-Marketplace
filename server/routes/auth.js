@@ -10,9 +10,13 @@ const router = express.Router();
 let schemaInitialized = false;
 async function ensureSchema() {
   if (schemaInitialized) return;
+  const client = await db.pool.connect();
+
   try {
+    await client.query("BEGIN");
+
     // 1. Create users table without inline role constraint
-    await db.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         first_name VARCHAR(100) NOT NULL,
@@ -25,7 +29,7 @@ async function ensureSchema() {
     `);
 
     // 2. Create user_roles junction table for normalized multi-role support
-    await db.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS user_roles (
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         role VARCHAR(20) NOT NULL CHECK (role IN ('STUDENT', 'TUTOR', 'ADMIN')),
@@ -34,23 +38,33 @@ async function ensureSchema() {
     `);
 
     // 3. Migrate existing role data from users table if legacy role column exists
-    const hasLegacyColumn = await db.query(`
+    const hasLegacyColumn = await client.query(`
       SELECT column_name
       FROM information_schema.columns
-      WHERE table_name = 'users' AND column_name = 'role';
+      WHERE table_schema = current_schema()
+        AND table_name = 'users'
+        AND column_name = 'role';
     `);
 
     if (hasLegacyColumn.rows.length > 0) {
-      await db.query(`
+      await client.query(`
         INSERT INTO user_roles (user_id, role)
         SELECT id, role FROM users WHERE role IS NOT NULL
         ON CONFLICT (user_id, role) DO NOTHING;
       `);
+
+      // Keep legacy values for compatibility, but stop requiring this single-role column.
+      await client.query("ALTER TABLE users ALTER COLUMN role DROP NOT NULL");
     }
 
+    await client.query("COMMIT");
     schemaInitialized = true;
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("Error initializing schema and migration:", err.message);
+    throw err;
+  } finally {
+    client.release();
   }
 }
 
@@ -97,33 +111,63 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Invalid role selected." });
     }
 
-    // Check if account already exists
-    const existingUser = await db.query("SELECT id FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({
-        error: "An account with this email address already exists. Please log in to your existing account to add the Tutor role."
-      });
-    }
-
     // Hash password
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // Insert user into users table
-    const insertResult = await db.query(
-      `INSERT INTO users (first_name, last_name, university, email, password_hash)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, first_name, last_name, university, email, created_at`,
-      [firstName.trim(), lastName.trim(), university.trim(), normalizedEmail, passwordHash]
-    );
+    const client = await db.pool.connect();
+    let newUser;
+    try {
+      await client.query("BEGIN");
 
-    const newUser = insertResult.rows[0];
+      const existingUser = await client.query("SELECT id FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
+      if (existingUser.rows.length > 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "An account with this email address already exists. Please log in to your existing account to add the Tutor role."
+        });
+      }
 
-    // Tutor intent never grants Tutor access; all public accounts start as Students.
-    await db.query(
-      `INSERT INTO user_roles (user_id, role) VALUES ($1, 'STUDENT') ON CONFLICT DO NOTHING;`,
-      [newUser.id]
-    );
+     const insertResult = await client.query(
+  `INSERT INTO users (
+      first_name,
+      last_name,
+      university,
+      email,
+      password_hash,
+      role
+   )
+   VALUES ($1, $2, $3, $4, $5, 'STUDENT')
+   RETURNING id, first_name, last_name, university, email, role, created_at`,
+  [
+    firstName.trim(),
+    lastName.trim(),
+    university.trim(),
+    normalizedEmail,
+    passwordHash
+  ]
+);
+
+newUser = insertResult.rows[0];
+
+      // Tutor intent never grants Tutor access; all public accounts start as Students.
+      await client.query(
+        "INSERT INTO user_roles (user_id, role) VALUES ($1, 'STUDENT')",
+        [newUser.id]
+      );
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      if (error.code === "23505") {
+        return res.status(400).json({
+          error: "An account with this email address already exists. Please log in to your existing account to add the Tutor role."
+        });
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
 
     const roles = await getUserRoles(newUser.id);
     setAuthCookie(res, newUser, roles);

@@ -255,7 +255,7 @@ export default function TutorApplicationPage() {
             <p className="mt-3 text-xs text-slate-500">Submitted {formatDate(application?.submittedAt || null)}</p>
             {!application?.emailVerified && (
               <p className="mt-5 border-t border-amber-100 pt-4 text-sm leading-6 text-amber-900">
-                Email verification is not configured yet. Your email has not been verified, and an administrator cannot approve the application until a real verification step is available.
+                Email verification is not configured, and your email is not marked as verified. Verification is not required for an administrator to review this application.
               </p>
             )}
           </section>

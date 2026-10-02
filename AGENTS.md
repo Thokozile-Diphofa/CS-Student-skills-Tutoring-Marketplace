@@ -107,6 +107,9 @@ Implemented tutor application routes:
 - `GET /api/tutor-applications` (authenticated; requires `ADMIN`)
 - `PATCH /api/tutor-applications/:id/review` (authenticated; requires `ADMIN`)
 
+Implemented admin dashboard route:
+- `GET /api/admin/dashboard` (authenticated; requires `ADMIN`; returns overview counts, safe user records, and approved tutor profiles)
+
 Email verification, session-request, notification, messaging, booking, review, and
 reporting routes are not implemented yet. Keep this section in sync as future endpoints
 are added.

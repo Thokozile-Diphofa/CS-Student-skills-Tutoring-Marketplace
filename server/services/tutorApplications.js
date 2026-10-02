@@ -95,7 +95,6 @@ async function getEffectiveRoles(userId) {
           FROM tutor_applications ta
           WHERE ta.user_id = ur.user_id
             AND ta.status = 'APPROVED'
-            AND ta.email_verified_at IS NOT NULL
         )
       )
     ORDER BY ur.role ASC
