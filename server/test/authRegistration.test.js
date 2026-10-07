@@ -23,7 +23,12 @@ test("dedicated administrator email matches the reserved universitydomain value"
   assert.equal(DEDICATED_ADMIN_EMAIL, "admin@universitydomain");
 });
 
-async function createHarness({ legacyRoleColumn = true, failRoleInsert = false, failMigration = false } = {}) {
+async function createHarness({
+  legacyRoleColumn = true,
+  failRoleInsert = false,
+  failMigration = false,
+  initializeSchema = true
+} = {}) {
   const existingPasswordHash = await bcrypt.hash("existing-test-password", 4);
   const state = {
     users: new Map([[1, {
@@ -68,6 +73,22 @@ async function createHarness({ legacyRoleColumn = true, failRoleInsert = false, 
         university: user.university,
         email: user.email
       }] : [] };
+    }
+    if (query.includes("update users") && query.includes("set first_name")) {
+      const [firstName, lastName, university, email, userId] = params;
+      const user = state.users.get(Number(userId));
+      if (!user) throw new Error("User not found for update");
+      user.first_name = firstName;
+      user.last_name = lastName;
+      user.university = university;
+      user.email = email;
+      return { rows: [{
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        university: user.university,
+        email: user.email
+      }] };
     }
     return { rows: [], rowCount: 0 };
   };
@@ -177,15 +198,23 @@ async function createHarness({ legacyRoleColumn = true, failRoleInsert = false, 
   delete require.cache[require.resolve("../middleware/auth")];
   delete require.cache[require.resolve("../routes/auth")];
 
+  const authRoutes = require("../routes/auth");
+  if (initializeSchema) await authRoutes.initializeSchema();
+
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
-  app.use("/api/auth", require("../routes/auth"));
+  app.use("/api/auth", authRoutes);
 
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   const address = server.address();
-  activeHarness = { server, state, url: `http://127.0.0.1:${address.port}` };
+  activeHarness = {
+    server,
+    state,
+    url: `http://127.0.0.1:${address.port}`,
+    initializeAuthSchema: authRoutes.initializeSchema
+  };
   return activeHarness;
 }
 
@@ -258,9 +287,37 @@ test("legacy migration removes stale normal-account ADMIN while preserving stude
   assert.deepEqual(login.data.user.roles, ["STUDENT"]);
 
   const cookie = login.response.headers.get("set-cookie").split(";")[0];
-  const meResponse = await fetch(`${harness.url}/api/auth/me`, { headers: { Cookie: cookie } });
-  const me = await meResponse.json();
+  const updatedProfileResponse = await fetch(`${harness.url}/api/auth/me`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: cookie
+    },
+    body: JSON.stringify({
+      firstName: "Updated",
+      lastName: "Student",
+      university: "UCT",
+      email: "224870812@myuct.ac.za"
+    })
+  });
+
+  const updatedProfileData = await updatedProfileResponse.json();
+  assert.equal(updatedProfileResponse.status, 200, updatedProfileData.error || "expected profile update to succeed");
+  assert.equal(updatedProfileData.user.firstName, "Updated");
+  assert.equal(updatedProfileData.user.lastName, "Student");
+  assert.equal(updatedProfileData.user.email, "224870812@myuct.ac.za");
+
+  const meResponse = await fetch(`${harness.url}/api/auth/me`, {
+    headers: { Cookie: cookie }
+  });
+  const meData = await meResponse.json();
   assert.equal(meResponse.status, 200);
+  assert.equal(meData.user.firstName, "Updated");
+  assert.equal(meData.user.email, "224870812@myuct.ac.za");
+
+  const meAfterUpdateResponse = await fetch(`${harness.url}/api/auth/me`, { headers: { Cookie: cookie } });
+  const me = await meAfterUpdateResponse.json();
+  assert.equal(meAfterUpdateResponse.status, 200);
   assert.deepEqual(me.user.roles, ["STUDENT"]);
 });
 
@@ -450,26 +507,17 @@ test("registration rolls back the user if the student role insert fails", async 
   assert.equal([...harness.state.users.values()].some((user) => user.email === "224870814@myuct.ac.za"), false);
 });
 
-test("registration stops if the legacy role migration fails", async () => {
-  const harness = await createHarness({ failMigration: true });
+test("startup stops if the legacy role migration fails", async () => {
+  const harness = await createHarness({ failMigration: true, initializeSchema: false });
   const originalError = console.error;
   console.error = () => {};
-  let registration;
   try {
-    registration = await postJson(`${harness.url}/api/auth/register`, {
-      firstName: "Migration",
-      lastName: "Failure",
-      university: "UCT",
-      email: "224870815@myuct.ac.za",
-      password: "migration-failure-password"
-    });
+    await assert.rejects(harness.initializeAuthSchema());
   } finally {
     console.error = originalError;
   }
 
-  assert.equal(registration.response.status, 500);
   assert.equal(harness.state.legacyRoleNullable, false);
-  assert.equal([...harness.state.users.values()].some((user) => user.email === "224870815@myuct.ac.za"), false);
   assert.deepEqual([...harness.state.roles.get(1)], ["STUDENT", "ADMIN", "TUTOR"]);
 });
 
@@ -487,9 +535,10 @@ test("existing approved TUTOR remains effective while stale normal-account ADMIN
 });
 
 test("legacy-only ADMIN on a normal account backfills as STUDENT, not ADMIN", async () => {
-  const harness = await createHarness();
+  const harness = await createHarness({ initializeSchema: false });
   harness.state.users.get(1).legacyRole = "ADMIN";
   harness.state.roles.set(1, new Set());
+  await harness.initializeAuthSchema();
 
   const login = await postJson(`${harness.url}/api/auth/login`, {
     email: "224696743@tut4life.ac.za",
@@ -503,7 +552,7 @@ test("legacy-only ADMIN on a normal account backfills as STUDENT, not ADMIN", as
 });
 
 test("legacy ADMIN for the dedicated email remains ADMIN-only", async () => {
-  const harness = await createHarness();
+  const harness = await createHarness({ initializeSchema: false });
   const passwordHash = await bcrypt.hash("dedicated-admin-password", 4);
   harness.state.users.set(2, {
     id: 2,
@@ -516,6 +565,7 @@ test("legacy ADMIN for the dedicated email remains ADMIN-only", async () => {
     legacyRole: "ADMIN"
   });
   harness.state.roles.set(2, new Set());
+  await harness.initializeAuthSchema();
 
   const login = await postJson(`${harness.url}/api/auth/login`, {
     email: DEDICATED_ADMIN_EMAIL,

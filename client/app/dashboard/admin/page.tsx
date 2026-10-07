@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Navbar from "../../components/Navbar";
+import DashboardShell from "../../components/DashboardShell";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -129,7 +129,7 @@ export default function AdminDashboardPage() {
       try {
         const response = await fetch(`${API_BASE_URL}/api/auth/me`, { credentials: "include" });
         if (response.status === 401) {
-          router.replace("/login?next=%2Fdashboard%2Fadmin");
+          router.replace("/admin/login");
           return;
         }
         if (!response.ok) throw new Error("Unable to verify your administrator access.");
@@ -242,9 +242,8 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] text-[#241B3B]">
-      <Navbar />
-      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
+    <DashboardShell role="ADMIN" activeItem="Dashboard" user={admin}>
+      <div className="min-w-0">
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#CFC4F8] pb-6">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wider text-[#6C4CF1]">Administration</p>
@@ -481,7 +480,7 @@ export default function AdminDashboardPage() {
             </section>
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardShell>
   );
 }

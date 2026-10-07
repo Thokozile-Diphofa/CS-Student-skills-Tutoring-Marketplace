@@ -9,10 +9,37 @@ const tutorRoutes = require("./routes/tutors");
 const tutorApplicationRoutes = require("./routes/tutorApplications");
 const sessionRequestRoutes = require("./routes/sessionRequests");
 const paymentRoutes = require("./routes/payments");
+const { ensureTutorApplicationSchema } = require("./services/tutorApplications");
+const { initializeWithRetry } = require("./services/startupInitialization");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const CLIENT_URL = (process.env.CLIENT_URL || "http://localhost:3000").replace(/\/$/, "");
+
+function redactErrorText(value) {
+  return String(value ?? "")
+    .replace(/(?:postgres(?:ql)?|https?):\/\/[^\s"'`]+/gi, "[REDACTED_URL]")
+    .replace(/\b(database_url|password|passwd|pwd|token|secret|authorization)\s*[:=]\s*["']?[^,\s;)"']+/gi, "$1=[REDACTED]");
+}
+
+function getErrorDetails(error, depth = 0) {
+  const errorObject = error && typeof error === "object" ? error : {};
+  const details = {
+    name: typeof errorObject.name === "string" ? errorObject.name : undefined,
+    message: redactErrorText(errorObject.message || error),
+    code: typeof errorObject.code === "string" ? errorObject.code : undefined,
+    stack: typeof errorObject.stack === "string" ? redactErrorText(errorObject.stack) : undefined
+  };
+
+  if (depth < 4 && Array.isArray(errorObject.errors)) {
+    details.errors = errorObject.errors.map((nestedError) => getErrorDetails(nestedError, depth + 1));
+  }
+  if (depth < 4 && errorObject.cause) {
+    details.cause = getErrorDetails(errorObject.cause, depth + 1);
+  }
+
+  return details;
+}
 
 // Dynamic CORS configuration for local development and specified client URL
 app.use(
@@ -54,7 +81,15 @@ app.get("/api/test", (req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Initialize the authentication schema before accepting requests.
+initializeWithRetry(async () => {
+  await authRoutes.initializeSchema();
+  await ensureTutorApplicationSchema();
+})
+  .then(() => {
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  })
+  .catch((error) => {
+    console.error("Failed to initialize authentication schema:", getErrorDetails(error));
+    process.exit(1);
+  });

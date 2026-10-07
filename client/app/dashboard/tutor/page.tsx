@@ -69,6 +69,47 @@ export default function TutorDashboardPage() {
   const [requestActionError, setRequestActionError] = useState("");
   const [requestActionMessage, setRequestActionMessage] = useState("");
   const [respondingToId, setRespondingToId] = useState<number | null>(null);
+  const [requestFilter, setRequestFilter] = useState<"ALL" | "PENDING" | "ACCEPTED" | "DECLINED">("ALL");
+  const [personalForm, setPersonalForm] = useState({
+    firstName: "",
+    lastName: "",
+    university: "",
+    email: ""
+  });
+  const [tutorProfileForm, setTutorProfileForm] = useState({
+    headline: "",
+    bio: "",
+    hourlyRate: "",
+    subjects: ""
+  });
+  const [isEditingPersonalProfile, setIsEditingPersonalProfile] = useState(false);
+  const [isEditingTutorProfile, setIsEditingTutorProfile] = useState(false);
+  const [profileUpdateMessage, setProfileUpdateMessage] = useState("");
+  const [profileUpdateError, setProfileUpdateError] = useState("");
+  const [tutorProfileUpdateMessage, setTutorProfileUpdateMessage] = useState("");
+  const [tutorProfileUpdateError, setTutorProfileUpdateError] = useState("");
+  const [savingPersonalProfile, setSavingPersonalProfile] = useState(false);
+  const [savingTutorProfile, setSavingTutorProfile] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setPersonalForm({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      university: user.university,
+      email: user.email
+    });
+  }, [user]);
+
+  useEffect(() => {
+    if (!profile) return;
+    setTutorProfileForm({
+      headline: profile.headline ?? "",
+      bio: profile.bio ?? "",
+      hourlyRate: String(profile.hourlyRate ?? ""),
+      subjects: (profile.subjects ?? []).join(", ")
+    });
+  }, [profile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,6 +189,82 @@ export default function TutorDashboardPage() {
     };
   }, [router]);
 
+  async function savePersonalProfile(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProfileUpdateError("");
+    setProfileUpdateMessage("");
+    setSavingPersonalProfile(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(personalForm)
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Your profile could not be updated.");
+
+      setUser(data.user);
+      setPersonalForm({
+        firstName: data.user.firstName,
+        lastName: data.user.lastName,
+        university: data.user.university,
+        email: data.user.email
+      });
+      setProfileUpdateMessage("Personal profile updated successfully.");
+      setIsEditingPersonalProfile(false);
+    } catch (error) {
+      setProfileUpdateError(error instanceof Error ? error.message : "Your profile could not be updated.");
+    } finally {
+      setSavingPersonalProfile(false);
+    }
+  }
+
+  async function saveTutorProfile(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTutorProfileUpdateError("");
+    setTutorProfileUpdateMessage("");
+    setSavingTutorProfile(true);
+
+    try {
+      const subjects = tutorProfileForm.subjects
+        .split(",")
+        .map((subject) => subject.trim())
+        .filter(Boolean);
+
+      const response = await fetch(`${API_BASE_URL}/api/tutors/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          headline: tutorProfileForm.headline.trim(),
+          bio: tutorProfileForm.bio.trim(),
+          hourlyRate: Number(tutorProfileForm.hourlyRate),
+          subjects
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Your tutor profile could not be updated.");
+
+      const refreshedResponse = await fetch(`${API_BASE_URL}/api/tutors/profile`, {
+        credentials: "include"
+      });
+      if (!refreshedResponse.ok) throw new Error("Your updated tutor profile could not be reloaded.");
+
+      const refreshedData = await refreshedResponse.json();
+      setProfile(refreshedData.tutor || null);
+      setTutorProfileUpdateMessage("Tutor profile updated successfully.");
+      setIsEditingTutorProfile(false);
+    } catch (error) {
+      setTutorProfileUpdateError(error instanceof Error ? error.message : "Your tutor profile could not be updated.");
+    } finally {
+      setSavingTutorProfile(false);
+    }
+  }
+
   async function respondToRequest(requestId: number, status: "ACCEPTED" | "DECLINED") {
     setRequestActionError("");
     setRequestActionMessage("");
@@ -201,7 +318,7 @@ export default function TutorDashboardPage() {
         <p className="text-sm font-medium text-[#625B71]">{user.university}</p>
       </div>
 
-      <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <OverviewMetric
           label="Pending Requests"
           value={requestsLoading ? "Loading" : requestsError ? "Unavailable" : incomingRequests.filter((request) => request.status === "PENDING").length}
@@ -211,6 +328,11 @@ export default function TutorDashboardPage() {
           label="Accepted Requests"
           value={requestsLoading ? "Loading" : requestsError ? "Unavailable" : incomingRequests.filter((request) => request.status === "ACCEPTED").length}
           detail={requestsError || "Requests you have accepted."}
+        />
+        <OverviewMetric
+          label="Declined Requests"
+          value={requestsLoading ? "Loading" : requestsError ? "Unavailable" : incomingRequests.filter((request) => request.status === "DECLINED").length}
+          detail={requestsError || "Requests you have declined."}
         />
         <OverviewMetric
           label="Subjects Offered"
@@ -227,7 +349,121 @@ export default function TutorDashboardPage() {
               <p className="mt-1 text-sm text-[#625B71]">Profile details currently stored for your tutor account.</p>
             </div>
             {profile && <p className="rounded-md bg-[#EDE7FF] px-3 py-1.5 text-xs font-semibold text-[#6C4CF1]">{profile.university}</p>}
+            {!isEditingPersonalProfile && (
+              <button
+                type="button"
+                onClick={() => setIsEditingPersonalProfile(true)}
+                className="rounded-lg border border-[#CFC4F8] bg-[#F3EEFF] px-3 py-2 text-xs font-semibold text-[#6C4CF1] transition hover:bg-[#EDE7FF]"
+              >
+                Edit account
+              </button>
+            )}
           </div>
+
+          {profileUpdateMessage && <p className="mt-4 text-sm font-medium text-[#15803D]" role="status">{profileUpdateMessage}</p>}
+          {profileUpdateError && <p className="mt-4 text-sm font-medium text-[#EF4444]" role="alert">{profileUpdateError}</p>}
+
+          {isEditingPersonalProfile ? (
+            <form onSubmit={savePersonalProfile} className="mt-5 space-y-4 border-b border-[#CFC4F8]/50 pb-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm text-[#625B71]">
+                  <span className="mb-1.5 block font-medium text-[#241B3B]">First name</span>
+                  <input
+                    type="text"
+                    value={personalForm.firstName}
+                    onChange={(event) => setPersonalForm((current) => ({ ...current, firstName: event.target.value }))}
+                    className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                    required
+                  />
+                </label>
+                <label className="text-sm text-[#625B71]">
+                  <span className="mb-1.5 block font-medium text-[#241B3B]">Last name</span>
+                  <input
+                    type="text"
+                    value={personalForm.lastName}
+                    onChange={(event) => setPersonalForm((current) => ({ ...current, lastName: event.target.value }))}
+                    className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                    required
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-[#625B71]">
+                <span className="mb-1.5 block font-medium text-[#241B3B]">University</span>
+                <select
+                  value={personalForm.university}
+                  onChange={(event) => setPersonalForm((current) => ({ ...current, university: event.target.value }))}
+                  className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                  required
+                >
+                  <option value="">Select your university</option>
+                  <option value="UCT">UCT</option>
+                  <option value="Wits">Wits</option>
+                  <option value="UP">UP</option>
+                  <option value="UJ">UJ</option>
+                  <option value="TUT">TUT</option>
+                  <option value="UKZN">UKZN</option>
+                  <option value="NWU">NWU</option>
+                  <option value="UNISA">UNISA</option>
+                  <option value="UWC">UWC</option>
+                  <option value="DUT">DUT</option>
+                  <option value="CPUT">CPUT</option>
+                  <option value="CUT">CUT</option>
+                  <option value="MUT">MUT</option>
+                  <option value="NMU">NMU</option>
+                  <option value="RU">RU</option>
+                  <option value="SMU">SMU</option>
+                  <option value="SPU">SPU</option>
+                  <option value="SU">SU</option>
+                  <option value="UFH">UFH</option>
+                  <option value="UL">UL</option>
+                  <option value="UMP">UMP</option>
+                  <option value="UNIVEN">UNIVEN</option>
+                  <option value="UNIZULU">UNIZULU</option>
+                  <option value="VUT">VUT</option>
+                  <option value="WSU">WSU</option>
+                </select>
+              </label>
+
+              <label className="block text-sm text-[#625B71]">
+                <span className="mb-1.5 block font-medium text-[#241B3B]">Email</span>
+                <input
+                  type="email"
+                  value={personalForm.email}
+                  onChange={(event) => setPersonalForm((current) => ({ ...current, email: event.target.value }))}
+                  className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                  required
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={savingPersonalProfile}
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#6C4CF1] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5B3FD2] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingPersonalProfile ? "Saving..." : "Save account"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPersonalForm({
+                      firstName: user?.firstName || "",
+                      lastName: user?.lastName || "",
+                      university: user?.university || "",
+                      email: user?.email || ""
+                    });
+                    setProfileUpdateError("");
+                    setProfileUpdateMessage("");
+                    setIsEditingPersonalProfile(false);
+                  }}
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#CFC4F8] bg-white px-4 py-2 text-sm font-semibold text-[#241B3B] transition hover:bg-[#F3EEFF]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : null}
 
           {profileLoading ? (
             <p className="py-6 text-sm text-[#625B71]" role="status">Loading your tutor profile...</p>
@@ -262,6 +498,100 @@ export default function TutorDashboardPage() {
           ) : (
             <p className="py-6 text-sm text-[#625B71]">Tutor profile information is not available.</p>
           )}
+
+          {!isEditingTutorProfile && profile && (
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsEditingTutorProfile(true)}
+                className="rounded-lg border border-[#CFC4F8] bg-[#F3EEFF] px-3 py-2 text-xs font-semibold text-[#6C4CF1] transition hover:bg-[#EDE7FF]"
+              >
+                Edit tutor profile
+              </button>
+            </div>
+          )}
+
+          {tutorProfileUpdateMessage && <p className="mt-4 text-sm font-medium text-[#15803D]" role="status">{tutorProfileUpdateMessage}</p>}
+          {tutorProfileUpdateError && <p className="mt-4 text-sm font-medium text-[#EF4444]" role="alert">{tutorProfileUpdateError}</p>}
+
+          {isEditingTutorProfile && (
+            <form onSubmit={saveTutorProfile} className="mt-5 space-y-4 border-t border-[#CFC4F8]/50 pt-5">
+              <label className="block text-sm text-[#625B71]">
+                <span className="mb-1.5 block font-medium text-[#241B3B]">Headline</span>
+                <input
+                  type="text"
+                  value={tutorProfileForm.headline}
+                  onChange={(event) => setTutorProfileForm((current) => ({ ...current, headline: event.target.value }))}
+                  className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                />
+              </label>
+
+              <label className="block text-sm text-[#625B71]">
+                <span className="mb-1.5 block font-medium text-[#241B3B]">Bio</span>
+                <textarea
+                  value={tutorProfileForm.bio}
+                  onChange={(event) => setTutorProfileForm((current) => ({ ...current, bio: event.target.value }))}
+                  rows={4}
+                  className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                />
+              </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm text-[#625B71]">
+                  <span className="mb-1.5 block font-medium text-[#241B3B]">Hourly rate</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={tutorProfileForm.hourlyRate}
+                    onChange={(event) => setTutorProfileForm((current) => ({ ...current, hourlyRate: event.target.value }))}
+                    className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                    required
+                  />
+                </label>
+
+                <label className="text-sm text-[#625B71]">
+                  <span className="mb-1.5 block font-medium text-[#241B3B]">Subjects</span>
+                  <input
+                    type="text"
+                    value={tutorProfileForm.subjects}
+                    onChange={(event) => setTutorProfileForm((current) => ({ ...current, subjects: event.target.value }))}
+                    className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                    placeholder="Algorithms, Web Dev, Maths"
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={savingTutorProfile}
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#22C55E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#16A34A] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingTutorProfile ? "Saving..." : "Save tutor profile"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (profile) {
+                      setTutorProfileForm({
+                        headline: profile.headline ?? "",
+                        bio: profile.bio ?? "",
+                        hourlyRate: String(profile.hourlyRate ?? ""),
+                        subjects: (profile.subjects ?? []).join(", ")
+                      });
+                    }
+                    setTutorProfileUpdateError("");
+                    setTutorProfileUpdateMessage("");
+                    setIsEditingTutorProfile(false);
+                  }}
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#CFC4F8] bg-white px-4 py-2 text-sm font-semibold text-[#241B3B] transition hover:bg-[#F3EEFF]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
         </section>
 
         <section className="rounded-xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm">
@@ -282,50 +612,93 @@ export default function TutorDashboardPage() {
       </div>
 
       <section id="requests" className="mt-7 scroll-mt-6 rounded-xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm">
-        <h2 className="text-lg font-bold text-[#241B3B]">Incoming Requests</h2>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <h2 className="text-lg font-bold text-[#241B3B]">Incoming Requests</h2>
+          <div className="flex flex-wrap gap-2">
+            {(["ALL", "PENDING", "ACCEPTED", "DECLINED"] as const).map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setRequestFilter(filter)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  requestFilter === filter
+                    ? "bg-[#6C4CF1] text-white shadow-sm"
+                    : "border border-[#CFC4F8] bg-white text-[#625B71] hover:bg-[#F3EEFF]"
+                }`}
+              >
+                {filter === "ALL" ? "All" : filter.charAt(0) + filter.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+        </div>
         {requestActionMessage && <p className="mt-4 text-sm font-medium text-[#15803D]" role="status">{requestActionMessage}</p>}
         {requestActionError && <p className="mt-4 text-sm font-medium text-[#EF4444]" role="alert">{requestActionError}</p>}
         {requestsLoading ? (
           <p className="mt-4 text-sm text-[#625B71]" role="status">Loading incoming requests...</p>
         ) : requestsError ? (
           <p className="mt-4 text-sm font-medium text-[#EF4444]" role="alert">{requestsError}</p>
-        ) : incomingRequests.length === 0 ? (
-          <p className="mt-4 text-sm leading-6 text-[#625B71]">No students have requested a session yet.</p>
-        ) : (
-          <ul className="mt-4 divide-y divide-[#CFC4F8]/60">
-            {incomingRequests.map((request) => (
-              <li key={request.id} className="grid gap-4 py-5 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-center">
-                <div className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
-                  <div><p className="text-[#625B71]">Student</p><p className="mt-1 font-semibold text-[#241B3B]">{request.studentFirstName} {request.studentLastName}</p></div>
-                  <div><p className="text-[#625B71]">Subject</p><p className="mt-1 font-semibold text-[#241B3B]">{request.subject}</p></div>
-                  <div><p className="text-[#625B71]">Requested date</p><p className="mt-1 font-semibold text-[#241B3B]">{formatRequestedDate(request.requestedDate)}</p></div>
-                  <div><p className="text-[#625B71]">Status</p><p className="mt-1 font-semibold text-[#241B3B]">{request.status}</p></div>
-                  {request.message && <div className="sm:col-span-2 xl:col-span-3"><p className="text-[#625B71]">Message</p><p className="mt-1 whitespace-pre-line text-[#241B3B]">{request.message}</p></div>}
-                </div>
-                {request.status === "PENDING" && (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void respondToRequest(request.id, "ACCEPTED")}
-                      disabled={respondingToId === request.id}
-                      className="min-h-10 rounded-lg bg-[#22C55E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#16A34A] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {respondingToId === request.id ? "Saving..." : "Accept"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void respondToRequest(request.id, "DECLINED")}
-                      disabled={respondingToId === request.id}
-                      className="min-h-10 rounded-lg border border-[#EF4444] px-4 py-2 text-sm font-semibold text-[#EF4444] transition hover:bg-[#EF4444]/5 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Decline
-                    </button>
+        ) : (() => {
+          const visibleRequests = incomingRequests.filter((request) => requestFilter === "ALL" || request.status === requestFilter);
+          return visibleRequests.length === 0 ? (
+            <p className="mt-4 text-sm leading-6 text-[#625B71]">
+              {requestFilter === "ALL" ? "No students have requested a session yet." : `No ${requestFilter.toLowerCase()} requests.`}
+            </p>
+          ) : (
+            <ul className="mt-4 divide-y divide-[#CFC4F8]/60">
+              {visibleRequests.map((request) => (
+                <li key={request.id} className="grid gap-4 py-5 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-center">
+                  <div className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                    <div><p className="text-[#625B71]">Student</p><p className="mt-1 font-semibold text-[#241B3B]">{request.studentFirstName} {request.studentLastName}</p></div>
+                    <div><p className="text-[#625B71]">Subject</p><p className="mt-1 font-semibold text-[#241B3B]">{request.subject}</p></div>
+                    <div><p className="text-[#625B71]">Requested date</p><p className="mt-1 font-semibold text-[#241B3B]">{formatRequestedDate(request.requestedDate)}</p></div>
+                    <div>
+                      <p className="text-[#625B71]">Status</p>
+                      <p
+                        className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          request.status === "ACCEPTED"
+                            ? "bg-[#22C55E]/10 text-[#15803D]"
+                            : request.status === "DECLINED"
+                              ? "bg-[#EF4444]/10 text-[#B91C1C]"
+                              : "bg-[#EDE7FF] text-[#6C4CF1]"
+                        }`}
+                      >
+                        {request.status}
+                      </p>
+                    </div>
+                    {request.message && <div className="sm:col-span-2 xl:col-span-3"><p className="text-[#625B71]">Message</p><p className="mt-1 whitespace-pre-line text-[#241B3B]">{request.message}</p></div>}
                   </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+                  {request.status === "PENDING" && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void respondToRequest(request.id, "ACCEPTED")}
+                        disabled={respondingToId === request.id}
+                        className="min-h-10 rounded-lg bg-[#22C55E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#16A34A] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {respondingToId === request.id ? "Saving..." : "Accept"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void respondToRequest(request.id, "DECLINED")}
+                        disabled={respondingToId === request.id}
+                        className="min-h-10 rounded-lg border border-[#EF4444] px-4 py-2 text-sm font-semibold text-[#EF4444] transition hover:bg-[#EF4444]/5 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
+                  {request.status === "DECLINED" && (
+                    <div className="flex items-center justify-end">
+                      <span className="rounded-full border border-[#EF4444]/30 bg-[#EF4444]/5 px-3 py-1 text-xs font-semibold text-[#B91C1C]">
+                        Declined
+                      </span>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          );
+        })()}
       </section>
     </DashboardShell>
   );

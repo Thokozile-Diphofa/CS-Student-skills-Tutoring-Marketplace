@@ -85,7 +85,7 @@ export default function LoginPage() {
       ? requestedPath
       : null;
     if (rolesArray.includes("ADMIN")) {
-      router.push("/dashboard/admin");
+      router.push("/admin/login");
     } else if (rolesArray.includes("TUTOR")) {
       router.push("/dashboard/tutor");
     } else if (safeRequestedPath) {
@@ -153,17 +153,22 @@ export default function LoginPage() {
                 </div>
               )}
 
-              <form onSubmit={handleLoginSubmit} className="space-y-5">
+              <form onSubmit={handleLoginSubmit} className="space-y-5" autoComplete="off">
                 <div>
                   <label htmlFor="email" className="mb-2 block text-sm font-medium text-[#241B3B]">
                     Email
                   </label>
                   <input
                     id="email"
+                    name="login-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="student@university.ac.za"
+                    autoComplete="off"
+                    spellCheck={false}
+                    autoCorrect="off"
+                    autoCapitalize="none"
                     style={{ background: "rgba(255, 255, 255, 0.55)" }}
                     className="w-full rounded-xl border border-[#CFC4F8] px-4 py-3 text-[#241B3B] placeholder-[#625B71] outline-none transition focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white"
                     disabled={loading}
@@ -177,11 +182,16 @@ export default function LoginPage() {
                   <div className="relative">
                     <input
                       id="password"
+                      name="login-password"
                       type={showPassword ? "text" : "password"}
                       value={password}
                       autoComplete="new-password"
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      autoCorrect="off"
+                      autoCapitalize="off"
                       style={{ background: "rgba(255, 255, 255, 0.55)" }}
                       className="w-full rounded-xl border border-[#CFC4F8] px-4 py-3 pr-11 text-[#241B3B] placeholder-[#625B71] outline-none transition focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white"
                       disabled={loading}
