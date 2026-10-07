@@ -179,6 +179,7 @@ export default function LoginPage() {
                       id="password"
                       type={showPassword ? "text" : "password"}
                       value={password}
+                      autoComplete="new-password"
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
                       style={{ background: "rgba(255, 255, 255, 0.55)" }}
