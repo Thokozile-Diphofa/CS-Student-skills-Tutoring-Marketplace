@@ -58,6 +58,26 @@ export default function StudentDashboardPage() {
   const [sessionsError, setSessionsError] = useState("");
   const [payingSessionId, setPayingSessionId] = useState<number | null>(null);
   const [paymentError, setPaymentError] = useState("");
+  const [profileForm, setProfileForm] = useState({
+    firstName: "",
+    lastName: "",
+    university: "",
+    email: ""
+  });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaveMessage, setProfileSaveMessage] = useState("");
+  const [profileSaveError, setProfileSaveError] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    setProfileForm({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      university: user.university,
+      email: user.email
+    });
+  }, [user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,6 +155,39 @@ export default function StudentDashboardPage() {
       cancelled = true;
     };
   }, [router]);
+
+  async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProfileSaveError("");
+    setProfileSaveMessage("");
+    setProfileSaving(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(profileForm)
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Your profile could not be updated.");
+
+      setUser(data.user);
+      setProfileForm({
+        firstName: data.user.firstName,
+        lastName: data.user.lastName,
+        university: data.user.university,
+        email: data.user.email
+      });
+      setProfileSaveMessage("Profile updated successfully.");
+      setIsEditingProfile(false);
+    } catch (error) {
+      setProfileSaveError(error instanceof Error ? error.message : "Your profile could not be updated.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
 
   async function payForSession(sessionRequestId: number) {
     setPaymentError("");
@@ -239,13 +292,131 @@ export default function StudentDashboardPage() {
 
       <div className="mt-7 grid gap-5 lg:grid-cols-2">
         <section id="profile" className="scroll-mt-6 rounded-xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm">
-          <h2 className="text-lg font-bold text-[#241B3B]">Profile</h2>
-          <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
-            <div><dt className="text-[#625B71]">Name</dt><dd className="mt-1 font-medium text-[#241B3B]">{user.firstName} {user.lastName}</dd></div>
-            <div><dt className="text-[#625B71]">Email</dt><dd className="mt-1 break-all font-medium text-[#241B3B]">{user.email}</dd></div>
-            <div><dt className="text-[#625B71]">University</dt><dd className="mt-1 font-medium text-[#241B3B]">{user.university}</dd></div>
-            <div><dt className="text-[#625B71]">Roles</dt><dd className="mt-1 font-medium text-[#241B3B]">{user.roles.join(", ")}</dd></div>
-          </dl>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-[#241B3B]">Profile</h2>
+            {!isEditingProfile && (
+              <button
+                type="button"
+                onClick={() => setIsEditingProfile(true)}
+                className="rounded-lg border border-[#CFC4F8] bg-[#F3EEFF] px-3 py-2 text-xs font-semibold text-[#6C4CF1] transition hover:bg-[#EDE7FF]"
+              >
+                Edit profile
+              </button>
+            )}
+          </div>
+
+          {profileSaveMessage && <p className="mt-4 text-sm font-medium text-[#15803D]" role="status">{profileSaveMessage}</p>}
+          {profileSaveError && <p className="mt-4 text-sm font-medium text-[#EF4444]" role="alert">{profileSaveError}</p>}
+
+          {isEditingProfile ? (
+            <form onSubmit={saveProfile} className="mt-5 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm text-[#625B71]">
+                  <span className="mb-1.5 block font-medium text-[#241B3B]">First name</span>
+                  <input
+                    type="text"
+                    value={profileForm.firstName}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, firstName: event.target.value }))}
+                    className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                    required
+                  />
+                </label>
+                <label className="text-sm text-[#625B71]">
+                  <span className="mb-1.5 block font-medium text-[#241B3B]">Last name</span>
+                  <input
+                    type="text"
+                    value={profileForm.lastName}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, lastName: event.target.value }))}
+                    className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                    required
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm text-[#625B71]">
+                <span className="mb-1.5 block font-medium text-[#241B3B]">University</span>
+                <select
+                  value={profileForm.university}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, university: event.target.value }))}
+                  className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                  required
+                >
+                  <option value="">Select your university</option>
+                  <option value="UCT">UCT</option>
+                  <option value="Wits">Wits</option>
+                  <option value="UP">UP</option>
+                  <option value="UJ">UJ</option>
+                  <option value="TUT">TUT</option>
+                  <option value="UKZN">UKZN</option>
+                  <option value="NWU">NWU</option>
+                  <option value="UP">UP</option>
+                  <option value="UNISA">UNISA</option>
+                  <option value="UWC">UWC</option>
+                  <option value="DUT">DUT</option>
+                  <option value="CPUT">CPUT</option>
+                  <option value="CUT">CUT</option>
+                  <option value="MUT">MUT</option>
+                  <option value="NMU">NMU</option>
+                  <option value="RU">RU</option>
+                  <option value="SMU">SMU</option>
+                  <option value="SPU">SPU</option>
+                  <option value="SU">SU</option>
+                  <option value="UFH">UFH</option>
+                  <option value="UL">UL</option>
+                  <option value="UMP">UMP</option>
+                  <option value="UNIVEN">UNIVEN</option>
+                  <option value="UNIZULU">UNIZULU</option>
+                  <option value="VUT">VUT</option>
+                  <option value="WSU">WSU</option>
+                </select>
+              </label>
+
+              <label className="block text-sm text-[#625B71]">
+                <span className="mb-1.5 block font-medium text-[#241B3B]">Email</span>
+                <input
+                  type="email"
+                  value={profileForm.email}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))}
+                  className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm text-[#241B3B] outline-none transition focus:border-[#6C4CF1]"
+                  required
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={profileSaving}
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#6C4CF1] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5B3FD2] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {profileSaving ? "Saving..." : "Save changes"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileForm({
+                      firstName: user?.firstName || "",
+                      lastName: user?.lastName || "",
+                      university: user?.university || "",
+                      email: user?.email || ""
+                    });
+                    setProfileSaveError("");
+                    setProfileSaveMessage("");
+                    setIsEditingProfile(false);
+                  }}
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#CFC4F8] bg-white px-4 py-2 text-sm font-semibold text-[#241B3B] transition hover:bg-[#F3EEFF]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+              <div><dt className="text-[#625B71]">Name</dt><dd className="mt-1 font-medium text-[#241B3B]">{user.firstName} {user.lastName}</dd></div>
+              <div><dt className="text-[#625B71]">Email</dt><dd className="mt-1 break-all font-medium text-[#241B3B]">{user.email}</dd></div>
+              <div><dt className="text-[#625B71]">University</dt><dd className="mt-1 font-medium text-[#241B3B]">{user.university}</dd></div>
+              <div><dt className="text-[#625B71]">Roles</dt><dd className="mt-1 font-medium text-[#241B3B]">{user.roles.join(", ")}</dd></div>
+            </dl>
+          )}
         </section>
 
         <section id="requests" className="scroll-mt-6 rounded-xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm">

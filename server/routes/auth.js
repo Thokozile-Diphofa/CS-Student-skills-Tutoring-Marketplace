@@ -140,7 +140,6 @@ function setAuthCookie(res, user, roles) {
 // POST /api/auth/register
 router.post("/register", async (req, res) => {
   try {
-    await ensureSchema();
     const { firstName, lastName, university, email, password, role } = req.body;
 
     if (!firstName || !lastName || !university || !email || !password) {
@@ -248,7 +247,6 @@ newUser = insertResult.rows[0];
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
   try {
-    await ensureSchema();
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -306,7 +304,6 @@ router.post("/login", async (req, res) => {
 // GET /api/auth/me
 router.get("/me", authenticateToken, async (req, res) => {
   try {
-    await ensureSchema();
     const userResult = await db.query(
       "SELECT id, first_name, last_name, university, email FROM users WHERE id = $1",
       [req.user.id]
@@ -335,10 +332,90 @@ router.get("/me", authenticateToken, async (req, res) => {
   }
 });
 
+// PUT /api/auth/me
+router.put("/me", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { firstName, lastName, university, email } = req.body;
+
+    if (!firstName || !lastName || !university || !email) {
+      return res.status(400).json({ error: "First name, last name, university, and email are required." });
+    }
+
+    const cleanFirstName = String(firstName).trim();
+    const cleanLastName = String(lastName).trim();
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    if (!cleanFirstName || !cleanLastName) {
+      return res.status(400).json({ error: "Please provide a valid first and last name." });
+    }
+
+    if (normalizedEmail === DEDICATED_ADMIN_EMAIL) {
+      return res.status(400).json({ error: "This email is reserved for platform administration." });
+    }
+
+    const universityValidation = validateStudentEmail(university, normalizedEmail);
+    if (universityValidation.error) {
+      return res.status(400).json({ error: universityValidation.error });
+    }
+
+    const currentUserResult = await db.query(
+      "SELECT id, first_name, last_name, university, email FROM users WHERE id = $1",
+      [userId]
+    );
+
+    if (currentUserResult.rows.length === 0) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+
+    const currentUser = currentUserResult.rows[0];
+    if (normalizedEmail !== currentUser.email.toLowerCase()) {
+      const existingUser = await db.query(
+        "SELECT id FROM users WHERE LOWER(email) = $1 AND id <> $2",
+        [normalizedEmail, userId]
+      );
+
+      if (existingUser.rows.length > 0) {
+        return res.status(409).json({ error: "This email is already associated with another account." });
+      }
+    }
+
+    const updatedUserResult = await db.query(
+      `UPDATE users
+       SET first_name = $1,
+           last_name = $2,
+           university = $3,
+           email = $4
+       WHERE id = $5
+       RETURNING id, first_name, last_name, university, email`,
+      [cleanFirstName, cleanLastName, universityValidation.university.code, normalizedEmail, userId]
+    );
+
+    const updatedUser = updatedUserResult.rows[0];
+    const roles = await getUserRoles(userId);
+
+    setAuthCookie(res, updatedUser, roles);
+
+    return res.json({
+      message: "Profile updated successfully.",
+      user: {
+        id: updatedUser.id,
+        firstName: updatedUser.first_name,
+        lastName: updatedUser.last_name,
+        university: updatedUser.university,
+        email: updatedUser.email,
+        roles
+      }
+    });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    return res.status(500).json({ error: "Server error updating profile: " + error.message });
+  }
+});
+
 // POST /api/auth/upgrade-tutor (Legacy endpoint; Tutor access now requires approval)
 router.post("/upgrade-tutor", authenticateToken, async (req, res) => {
   try {
-    await ensureSchema();
     const userId = req.user.id;
     const userResult = await db.query(
       "SELECT id, first_name, last_name, university, email FROM users WHERE id = $1",
@@ -377,3 +454,4 @@ router.post("/logout", (req, res) => {
 });
 
 module.exports = router;
+module.exports.initializeSchema = ensureSchema;
