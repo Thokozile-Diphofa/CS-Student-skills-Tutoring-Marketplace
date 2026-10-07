@@ -102,9 +102,9 @@ function formatRate(value: number | null) {
 }
 
 function statusClass(status: ApplicationStatus) {
-  if (status === "PENDING") return "border-amber-300 bg-amber-50 text-amber-900";
-  if (status === "APPROVED") return "border-emerald-300 bg-emerald-50 text-emerald-900";
-  return "border-slate-300 bg-slate-100 text-slate-700";
+  if (status === "PENDING") return "border-[#FF8A4C]/40 bg-[#FF8A4C]/10 text-[#FF8A4C]";
+  if (status === "APPROVED") return "border-[#22C55E]/40 bg-[#22C55E]/10 text-[#22C55E]";
+  return "border-[#EF4444]/40 bg-[#EF4444]/10 text-[#EF4444]";
 }
 
 export default function AdminDashboardPage() {
@@ -227,7 +227,7 @@ export default function AdminDashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600" role="status">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] text-[#625B71]" role="status">
         <p className="text-sm font-medium">Loading admin dashboard...</p>
       </div>
     );
@@ -235,27 +235,27 @@ export default function AdminDashboardPage() {
 
   if (!admin) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-5 text-slate-600" role="status">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] px-5 text-[#625B71]" role="status">
         <p>{pageError || "Redirecting to an authorized page..."}</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-slate-50 text-slate-900">
+    <div className="min-h-screen overflow-x-clip bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] text-[#241B3B]">
       <Navbar />
       <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-6">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#CFC4F8] pb-6">
           <div>
-            <p className="text-sm font-semibold uppercase text-red-700">Administration</p>
-            <h1 className="mt-1 text-3xl font-bold text-slate-950">Admin Dashboard</h1>
-            <p className="mt-2 text-sm text-slate-600">Welcome, {admin.firstName} {admin.lastName}</p>
+            <p className="text-sm font-semibold uppercase tracking-wider text-[#6C4CF1]">Administration</p>
+            <h1 className="mt-1 text-3xl font-bold text-[#241B3B]">Admin Dashboard</h1>
+            <p className="mt-2 text-sm text-[#625B71]">Welcome, {admin.firstName} {admin.lastName}</p>
           </div>
-          <p className="text-sm text-slate-600">Signed in as <span className="font-semibold text-slate-900">{admin.roles.join(", ")}</span></p>
+          <p className="text-sm text-[#625B71]">Signed in as <span className="font-semibold text-[#241B3B]">{admin.roles.join(", ")}</span></p>
         </div>
 
         {pageError && (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l-4 border-red-500 bg-red-50 p-4 text-sm text-red-900" role="alert">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l-4 border-[#EF4444] bg-[#EF4444]/10 p-4 text-sm text-[#EF4444]" role="alert">
             <p>{pageError}</p>
             <button type="button" onClick={() => void refreshDashboard()} className="font-semibold underline">Retry</button>
           </div>
@@ -264,27 +264,27 @@ export default function AdminDashboardPage() {
         {dashboard && (
           <>
             <section aria-labelledby="overview-heading" className="py-7">
-              <h2 id="overview-heading" className="text-lg font-bold text-slate-950">Overview</h2>
+              <h2 id="overview-heading" className="text-lg font-bold text-[#241B3B]">Overview</h2>
               <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
                 {[
-                  { label: "Total Users", value: dashboard.overview.totalUsers, tone: "border-slate-300" },
-                  { label: "Students", value: dashboard.overview.students, tone: "border-sky-300" },
-                  { label: "Approved Tutors", value: dashboard.overview.approvedTutors, tone: "border-emerald-300" },
-                  { label: "Pending Applications", value: dashboard.overview.pendingApplications, tone: "border-amber-400" }
+                  { label: "Total Users", value: dashboard.overview.totalUsers, tone: "border-[#6C4CF1]" },
+                  { label: "Students", value: dashboard.overview.students, tone: "border-[#8B5CF6]" },
+                  { label: "Approved Tutors", value: dashboard.overview.approvedTutors, tone: "border-[#22C55E]" },
+                  { label: "Pending Applications", value: dashboard.overview.pendingApplications, tone: "border-[#FF8A4C]" }
                 ].map((item) => (
-                  <div key={item.label} className={`border-l-4 ${item.tone} bg-white px-4 py-4 shadow-sm`}>
-                    <p className="text-sm text-slate-600">{item.label}</p>
-                    <p className="mt-1 text-2xl font-bold tabular-nums text-slate-950">{item.value}</p>
+                  <div key={item.label} className={`border-l-4 ${item.tone} rounded-r-xl bg-white/80 px-4 py-4 shadow-sm backdrop-blur-sm`}>
+                    <p className="text-sm text-[#625B71]">{item.label}</p>
+                    <p className="mt-1 text-2xl font-bold tabular-nums text-[#241B3B]">{item.value}</p>
                   </div>
                 ))}
               </div>
             </section>
 
-            <section aria-labelledby="applications-heading" className="border-t border-slate-200 py-7">
+            <section aria-labelledby="applications-heading" className="border-t border-[#CFC4F8] py-7">
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                  <h2 id="applications-heading" className="text-xl font-bold text-slate-950">Tutor Applications</h2>
-                  <p className="mt-1 text-sm text-slate-600">Review submitted applications and decide tutor access.</p>
+                  <h2 id="applications-heading" className="text-xl font-bold text-[#241B3B]">Tutor Applications</h2>
+                  <p className="mt-1 text-sm text-[#625B71]">Review submitted applications and decide tutor access.</p>
                 </div>
                 <div className="flex max-w-full flex-wrap gap-1" role="tablist" aria-label="Filter tutor applications">
                   {(["ALL", "PENDING", "APPROVED", "REJECTED"] as ApplicationFilter[]).map((status) => (
@@ -294,7 +294,7 @@ export default function AdminDashboardPage() {
                       role="tab"
                       aria-selected={filter === status}
                       onClick={() => setFilter(status)}
-                      className={`shrink-0 border-b-2 px-3 py-2 text-sm font-semibold ${filter === status ? "border-amber-500 text-slate-950" : "border-transparent text-slate-500 hover:text-slate-900"}`}
+                      className={`shrink-0 border-b-2 px-3 py-2 text-sm font-semibold transition ${filter === status ? "border-[#6C4CF1] text-[#6C4CF1]" : "border-transparent text-[#625B71] hover:text-[#241B3B]"}`}
                     >
                       {status === "ALL" ? "All" : status.charAt(0) + status.slice(1).toLowerCase()}
                       <span className="ml-1 text-xs tabular-nums">{applicationCounts[status]}</span>
@@ -303,29 +303,29 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="mt-5 divide-y divide-slate-200 border-y border-slate-200 sm:hidden">
+              <div className="mt-5 divide-y divide-[#CFC4F8] border-y border-[#CFC4F8] sm:hidden">
                 {filteredApplications.map((application) => (
-                  <article key={application.id} className={`px-3 py-4 ${application.status === "PENDING" ? "bg-amber-50/50" : "bg-white"}`}>
+                  <article key={application.id} className={`px-3 py-4 ${application.status === "PENDING" ? "bg-[#EDE7FF]/50" : "bg-white/80"}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-semibold text-slate-950">{application.firstName} {application.lastName}</p>
-                        <p className="mt-0.5 break-all text-xs text-slate-600">{application.email}</p>
+                        <p className="font-semibold text-[#241B3B]">{application.firstName} {application.lastName}</p>
+                        <p className="mt-0.5 break-all text-xs text-[#625B71]">{application.email}</p>
                       </div>
-                      <span className={`inline-flex shrink-0 border px-2 py-1 text-xs font-semibold ${statusClass(application.status)}`}>{application.status}</span>
+                      <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusClass(application.status)}`}>{application.status}</span>
                     </div>
-                    <p className="mt-2 break-words text-sm text-slate-700">{application.institution}</p>
-                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-600">
+                    <p className="mt-2 break-words text-sm text-[#241B3B]">{application.institution}</p>
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[#625B71]">
                       <span>{formatDate(application.submittedAt)}</span>
-                      <button type="button" onClick={() => { setSelectedApplicationId(application.id); setShowRejectionForm(false); setReviewError(""); }} className="font-semibold text-amber-800 underline underline-offset-2">View</button>
+                      <button type="button" onClick={() => { setSelectedApplicationId(application.id); setShowRejectionForm(false); setReviewError(""); }} className="font-semibold text-[#6C4CF1] underline underline-offset-2">View</button>
                     </div>
                   </article>
                 ))}
-                {filteredApplications.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-600">No {filter === "ALL" ? "submitted" : filter.toLowerCase()} applications.</p>}
+                {filteredApplications.length === 0 && <p className="px-4 py-8 text-center text-sm text-[#625B71]">No {filter === "ALL" ? "submitted" : filter.toLowerCase()} applications.</p>}
               </div>
 
-              <div className="mt-5 hidden overflow-x-auto border-y border-slate-200 sm:block">
+              <div className="mt-5 hidden overflow-x-auto rounded-xl border border-[#CFC4F8] bg-white/80 shadow-sm backdrop-blur-sm sm:block">
                 <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-slate-100 text-xs uppercase text-slate-600">
+                  <thead className="bg-[#EDE7FF]/60 text-xs uppercase text-[#625B71]">
                     <tr>
                       <th scope="col" className="px-4 py-3">Applicant</th>
                       <th scope="col" className="px-4 py-3">Institution</th>
@@ -334,147 +334,147 @@ export default function AdminDashboardPage() {
                       <th scope="col" className="px-4 py-3"><span className="sr-only">View</span></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white">
+                  <tbody className="divide-y divide-[#CFC4F8]">
                     {filteredApplications.map((application) => (
-                      <tr key={application.id} className={application.status === "PENDING" ? "bg-amber-50/50" : ""}>
+                      <tr key={application.id} className={application.status === "PENDING" ? "bg-[#EDE7FF]/30" : ""}>
                         <td className="px-4 py-3">
-                          <p className="font-semibold text-slate-950">{application.firstName} {application.lastName}</p>
-                          <p className="mt-0.5 text-xs text-slate-600">{application.email}</p>
+                          <p className="font-semibold text-[#241B3B]">{application.firstName} {application.lastName}</p>
+                          <p className="mt-0.5 text-xs text-[#625B71]">{application.email}</p>
                         </td>
-                        <td className="px-4 py-3 text-slate-700">{application.institution}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-700">{formatDate(application.submittedAt)}</td>
+                        <td className="px-4 py-3 text-[#241B3B]">{application.institution}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-[#625B71]">{formatDate(application.submittedAt)}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusClass(application.status)}`}>
+                          <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusClass(application.status)}`}>
                             {application.status}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button type="button" onClick={() => { setSelectedApplicationId(application.id); setShowRejectionForm(false); setReviewError(""); }} className="font-semibold text-amber-800 underline underline-offset-2">
+                          <button type="button" onClick={() => { setSelectedApplicationId(application.id); setShowRejectionForm(false); setReviewError(""); }} className="font-semibold text-[#6C4CF1] underline underline-offset-2">
                             View
                           </button>
                         </td>
                       </tr>
                     ))}
                     {filteredApplications.length === 0 && (
-                      <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-600">No {filter === "ALL" ? "submitted" : filter.toLowerCase()} applications.</td></tr>
+                      <tr><td colSpan={5} className="px-4 py-8 text-center text-[#625B71]">No {filter === "ALL" ? "submitted" : filter.toLowerCase()} applications.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
 
               {selectedApplication && (
-                <div className="mt-6 border-l-4 border-amber-400 bg-white p-5 sm:p-7">
-                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
+                <div className="mt-6 rounded-xl border-l-4 border-[#6C4CF1] border-y border-r border-[#CFC4F8] bg-white/90 p-5 shadow-sm backdrop-blur-sm sm:p-7">
+                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#CFC4F8]/50 pb-4">
                     <div>
-                      <p className="text-xs font-bold uppercase text-amber-800">Tutor Application</p>
-                      <h3 className="mt-1 text-xl font-bold text-slate-950">{selectedApplication.firstName} {selectedApplication.lastName}</h3>
-                      <a className="mt-1 inline-block break-all text-sm text-slate-700 underline" href={`mailto:${selectedApplication.email}`}>{selectedApplication.email}</a>
+                      <p className="text-xs font-bold uppercase text-[#6C4CF1]">Tutor Application</p>
+                      <h3 className="mt-1 text-xl font-bold text-[#241B3B]">{selectedApplication.firstName} {selectedApplication.lastName}</h3>
+                      <a className="mt-1 inline-block break-all text-sm text-[#6C4CF1] underline" href={`mailto:${selectedApplication.email}`}>{selectedApplication.email}</a>
                     </div>
-                    <span className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusClass(selectedApplication.status)}`}>
+                    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusClass(selectedApplication.status)}`}>
                       {selectedApplication.status}
                     </span>
                   </div>
 
                   <dl className="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <div><dt className="text-xs font-semibold uppercase text-slate-500">Institution</dt><dd className="mt-1 text-sm text-slate-900">{selectedApplication.institution || "Not provided"}</dd></div>
-                    <div><dt className="text-xs font-semibold uppercase text-slate-500">Programme / course</dt><dd className="mt-1 text-sm text-slate-900">{selectedApplication.programme || "Not provided"}</dd></div>
-                    <div><dt className="text-xs font-semibold uppercase text-slate-500">Year of study</dt><dd className="mt-1 text-sm text-slate-900">{selectedApplication.yearOfStudy ?? "Not provided"}</dd></div>
-                    <div><dt className="text-xs font-semibold uppercase text-slate-500">Subjects / modules</dt><dd className="mt-1 text-sm text-slate-900">{selectedApplication.subjects?.join(", ") || "Not provided"}</dd></div>
-                    <div><dt className="text-xs font-semibold uppercase text-slate-500">Proposed hourly rate</dt><dd className="mt-1 text-sm text-slate-900">{formatRate(selectedApplication.proposedHourlyRate)}</dd></div>
-                    <div><dt className="text-xs font-semibold uppercase text-slate-500">Application date</dt><dd className="mt-1 text-sm text-slate-900">{formatDate(selectedApplication.submittedAt)}</dd></div>
-                    <div className="sm:col-span-2 lg:col-span-3"><dt className="text-xs font-semibold uppercase text-slate-500">Motivation</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{selectedApplication.motivation || "Not provided"}</dd></div>
-                    <div className="sm:col-span-2 lg:col-span-3"><dt className="text-xs font-semibold uppercase text-slate-500">Tutoring experience</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{selectedApplication.experience || "Not provided"}</dd></div>
-                    {selectedApplication.rejectionReason && <div className="sm:col-span-2 lg:col-span-3"><dt className="text-xs font-semibold uppercase text-slate-500">Rejection reason</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{selectedApplication.rejectionReason}</dd></div>}
+                    <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Institution</dt><dd className="mt-1 text-sm text-[#241B3B]">{selectedApplication.institution || "Not provided"}</dd></div>
+                    <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Programme / course</dt><dd className="mt-1 text-sm text-[#241B3B]">{selectedApplication.programme || "Not provided"}</dd></div>
+                    <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Year of study</dt><dd className="mt-1 text-sm text-[#241B3B]">{selectedApplication.yearOfStudy ?? "Not provided"}</dd></div>
+                    <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Subjects / modules</dt><dd className="mt-1 text-sm text-[#241B3B]">{selectedApplication.subjects?.join(", ") || "Not provided"}</dd></div>
+                    <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Proposed hourly rate</dt><dd className="mt-1 text-sm text-[#241B3B]">{formatRate(selectedApplication.proposedHourlyRate)}</dd></div>
+                    <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Application date</dt><dd className="mt-1 text-sm text-[#241B3B]">{formatDate(selectedApplication.submittedAt)}</dd></div>
+                    <div className="sm:col-span-2 lg:col-span-3"><dt className="text-xs font-semibold uppercase text-[#625B71]">Motivation</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#241B3B]">{selectedApplication.motivation || "Not provided"}</dd></div>
+                    <div className="sm:col-span-2 lg:col-span-3"><dt className="text-xs font-semibold uppercase text-[#625B71]">Tutoring experience</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#241B3B]">{selectedApplication.experience || "Not provided"}</dd></div>
+                    {selectedApplication.rejectionReason && <div className="sm:col-span-2 lg:col-span-3"><dt className="text-xs font-semibold uppercase text-[#625B71]">Rejection reason</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#241B3B]">{selectedApplication.rejectionReason}</dd></div>}
                   </dl>
 
                   {selectedApplication.status === "PENDING" && (
-                    <div className="mt-6 border-t border-slate-200 pt-5">
-                      {reviewError && <p className="mb-4 text-sm text-red-700" role="alert">{reviewError}</p>}
+                    <div className="mt-6 border-t border-[#CFC4F8]/50 pt-5">
+                      {reviewError && <p className="mb-4 text-sm font-medium text-[#EF4444]" role="alert">{reviewError}</p>}
                       {showRejectionForm ? (
                         <div className="max-w-2xl">
-                          <label htmlFor="rejection-reason" className="block text-sm font-semibold text-slate-800">Reason for rejection</label>
-                          <textarea id="rejection-reason" value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} maxLength={3000} rows={3} className="mt-2 w-full border border-slate-300 bg-white p-3 text-sm outline-none focus:border-amber-500" />
+                          <label htmlFor="rejection-reason" className="block text-sm font-semibold text-[#241B3B]">Reason for rejection</label>
+                          <textarea id="rejection-reason" value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} maxLength={3000} rows={3} className="mt-2 w-full rounded-xl border border-[#CFC4F8] bg-white p-3 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
                           <div className="mt-3 flex flex-wrap gap-3">
-                            <button type="button" onClick={() => void reviewApplication("REJECTED")} disabled={reviewingId !== null} className="bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60">{reviewingId ? "Saving..." : "Confirm rejection"}</button>
-                            <button type="button" onClick={() => { setShowRejectionForm(false); setReviewError(""); }} disabled={reviewingId !== null} className="px-4 py-2 text-sm font-semibold text-slate-700 underline">Cancel</button>
+                            <button type="button" onClick={() => void reviewApplication("REJECTED")} disabled={reviewingId !== null} className="rounded-lg bg-[#EF4444] px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-60">{reviewingId ? "Saving..." : "Confirm rejection"}</button>
+                            <button type="button" onClick={() => { setShowRejectionForm(false); setReviewError(""); }} disabled={reviewingId !== null} className="px-4 py-2 text-sm font-semibold text-[#625B71] underline">Cancel</button>
                           </div>
                         </div>
                       ) : (
                         <div className="flex flex-wrap gap-3">
-                          <button type="button" onClick={() => void reviewApplication("APPROVED")} disabled={reviewingId !== null} className="bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60">{reviewingId === selectedApplication.id ? "Saving..." : "Approve Application"}</button>
-                          <button type="button" onClick={() => { setShowRejectionForm(true); setReviewError(""); }} disabled={reviewingId !== null} className="border border-slate-400 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-60">Reject Application</button>
+                          <button type="button" onClick={() => void reviewApplication("APPROVED")} disabled={reviewingId !== null} className="rounded-lg bg-[#22C55E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60">{reviewingId === selectedApplication.id ? "Saving..." : "Approve Application"}</button>
+                          <button type="button" onClick={() => { setShowRejectionForm(true); setReviewError(""); }} disabled={reviewingId !== null} className="rounded-lg border border-[#EF4444] px-4 py-2 text-sm font-semibold text-[#EF4444] transition hover:bg-[#EF4444]/10 disabled:opacity-60">Reject Application</button>
                         </div>
                       )}
                     </div>
                   )}
-                  {notice && <p className="mt-4 text-sm font-medium text-emerald-800" role="status">{notice}</p>}
+                  {notice && <p className="mt-4 text-sm font-semibold text-[#22C55E]" role="status">{notice}</p>}
                 </div>
               )}
             </section>
 
-            <section aria-labelledby="users-heading" className="border-t border-slate-200 py-7">
-              <h2 id="users-heading" className="text-xl font-bold text-slate-950">Users</h2>
-              <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200 sm:hidden">
+            <section aria-labelledby="users-heading" className="border-t border-[#CFC4F8] py-7">
+              <h2 id="users-heading" className="text-xl font-bold text-[#241B3B]">Users</h2>
+              <div className="mt-4 divide-y divide-[#CFC4F8] border-y border-[#CFC4F8] sm:hidden">
                 {dashboard.users.map((account) => (
-                  <article key={account.id} className="space-y-1 px-3 py-4">
-                    <p className="font-semibold text-slate-950">{account.firstName} {account.lastName}</p>
-                    <p className="break-all text-sm text-slate-700">{account.email}</p>
-                    <p className="break-words text-xs text-slate-600">{account.roles.join(", ") || "No role"} · Joined {formatDate(account.createdAt)}</p>
+                  <article key={account.id} className="space-y-1 px-3 py-4 bg-white/80">
+                    <p className="font-semibold text-[#241B3B]">{account.firstName} {account.lastName}</p>
+                    <p className="break-all text-sm text-[#625B71]">{account.email}</p>
+                    <p className="break-words text-xs text-[#625B71]">{account.roles.join(", ") || "No role"} · Joined {formatDate(account.createdAt)}</p>
                   </article>
                 ))}
-                {dashboard.users.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-600">No users found.</p>}
+                {dashboard.users.length === 0 && <p className="px-4 py-8 text-center text-sm text-[#625B71]">No users found.</p>}
               </div>
-              <div className="mt-4 hidden overflow-x-auto border-y border-slate-200 sm:block">
+              <div className="mt-4 hidden overflow-x-auto rounded-xl border border-[#CFC4F8] bg-white/80 shadow-sm backdrop-blur-sm sm:block">
                 <table className="w-full min-w-[680px] text-left text-sm">
-                  <thead className="bg-slate-100 text-xs uppercase text-slate-600">
+                  <thead className="bg-[#EDE7FF]/60 text-xs uppercase text-[#625B71]">
                     <tr><th scope="col" className="px-4 py-3">Name</th><th scope="col" className="px-4 py-3">Email</th><th scope="col" className="px-4 py-3">Role / access</th><th scope="col" className="px-4 py-3">Joined</th></tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white">
+                  <tbody className="divide-y divide-[#CFC4F8]">
                     {dashboard.users.map((account) => (
                       <tr key={account.id}>
-                        <td className="px-4 py-3 font-semibold text-slate-950">{account.firstName} {account.lastName}</td>
-                        <td className="px-4 py-3 text-slate-700">{account.email}</td>
-                        <td className="px-4 py-3 text-slate-700">{account.roles.join(", ") || "No role"}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-700">{formatDate(account.createdAt)}</td>
+                        <td className="px-4 py-3 font-semibold text-[#241B3B]">{account.firstName} {account.lastName}</td>
+                        <td className="px-4 py-3 text-[#241B3B]">{account.email}</td>
+                        <td className="px-4 py-3 text-[#625B71]">{account.roles.join(", ") || "No role"}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-[#625B71]">{formatDate(account.createdAt)}</td>
                       </tr>
                     ))}
-                    {dashboard.users.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-600">No users found.</td></tr>}
+                    {dashboard.users.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-[#625B71]">No users found.</td></tr>}
                   </tbody>
                 </table>
               </div>
             </section>
 
-            <section aria-labelledby="tutors-heading" className="border-t border-slate-200 py-7">
-              <h2 id="tutors-heading" className="text-xl font-bold text-slate-950">Approved Tutors</h2>
-              <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200 sm:hidden">
+            <section aria-labelledby="tutors-heading" className="border-t border-[#CFC4F8] py-7">
+              <h2 id="tutors-heading" className="text-xl font-bold text-[#241B3B]">Approved Tutors</h2>
+              <div className="mt-4 divide-y divide-[#CFC4F8] border-y border-[#CFC4F8] sm:hidden">
                 {dashboard.approvedTutors.map((tutor) => (
-                  <article key={tutor.id} className="space-y-1 px-3 py-4">
-                    <p className="font-semibold text-slate-950">{tutor.firstName} {tutor.lastName}</p>
-                    <p className="break-all text-sm text-slate-700">{tutor.email}</p>
-                    <p className="break-words text-sm text-slate-700">{tutor.subjects.join(", ") || "No subjects listed"}</p>
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-slate-600">
+                  <article key={tutor.id} className="space-y-1 px-3 py-4 bg-white/80">
+                    <p className="font-semibold text-[#241B3B]">{tutor.firstName} {tutor.lastName}</p>
+                    <p className="break-all text-sm text-[#625B71]">{tutor.email}</p>
+                    <p className="break-words text-sm text-[#241B3B]">{tutor.subjects.join(", ") || "No subjects listed"}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-[#625B71]">
                       <span>{formatRate(tutor.hourlyRate)}</span>
-                      <span className={`inline-flex border px-2 py-1 font-semibold ${statusClass(tutor.approvalStatus)}`}>{tutor.approvalStatus}</span>
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 font-semibold ${statusClass(tutor.approvalStatus)}`}>{tutor.approvalStatus}</span>
                     </div>
                   </article>
                 ))}
-                {dashboard.approvedTutors.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-600">No approved tutors yet.</p>}
+                {dashboard.approvedTutors.length === 0 && <p className="px-4 py-8 text-center text-sm text-[#625B71]">No approved tutors yet.</p>}
               </div>
-              <div className="mt-4 hidden overflow-x-auto border-y border-slate-200 sm:block">
+              <div className="mt-4 hidden overflow-x-auto rounded-xl border border-[#CFC4F8] bg-white/80 shadow-sm backdrop-blur-sm sm:block">
                 <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-slate-100 text-xs uppercase text-slate-600">
+                  <thead className="bg-[#EDE7FF]/60 text-xs uppercase text-[#625B71]">
                     <tr><th scope="col" className="px-4 py-3">Tutor</th><th scope="col" className="px-4 py-3">Subjects / modules</th><th scope="col" className="px-4 py-3">Hourly rate</th><th scope="col" className="px-4 py-3">Approval</th></tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white">
+                  <tbody className="divide-y divide-[#CFC4F8]">
                     {dashboard.approvedTutors.map((tutor) => (
                       <tr key={tutor.id}>
-                        <td className="px-4 py-3"><p className="font-semibold text-slate-950">{tutor.firstName} {tutor.lastName}</p><p className="mt-0.5 text-xs text-slate-600">{tutor.email}</p></td>
-                        <td className="px-4 py-3 text-slate-700">{tutor.subjects.join(", ") || "No subjects listed"}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-700">{formatRate(tutor.hourlyRate)}</td>
-                        <td className="px-4 py-3"><span className={`inline-flex border px-2 py-1 text-xs font-semibold ${statusClass(tutor.approvalStatus)}`}>{tutor.approvalStatus}</span></td>
+                        <td className="px-4 py-3"><p className="font-semibold text-[#241B3B]">{tutor.firstName} {tutor.lastName}</p><p className="mt-0.5 text-xs text-[#625B71]">{tutor.email}</p></td>
+                        <td className="px-4 py-3 text-[#241B3B]">{tutor.subjects.join(", ") || "No subjects listed"}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-[#241B3B]">{formatRate(tutor.hourlyRate)}</td>
+                        <td className="px-4 py-3"><span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${statusClass(tutor.approvalStatus)}`}>{tutor.approvalStatus}</span></td>
                       </tr>
                     ))}
-                    {dashboard.approvedTutors.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-600">No approved tutors yet.</td></tr>}
+                    {dashboard.approvedTutors.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-[#625B71]">No approved tutors yet.</td></tr>}
                   </tbody>
                 </table>
               </div>

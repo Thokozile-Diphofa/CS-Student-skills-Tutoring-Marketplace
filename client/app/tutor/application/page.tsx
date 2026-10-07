@@ -65,11 +65,10 @@ export default function TutorApplicationPage() {
   const [applicant, setApplicant] = useState<Applicant | null>(null);
   const [application, setApplication] = useState<TutorApplication | null>(null);
   const [applicationStarted, setApplicationStarted] = useState(false);
-  const [subjects, setSubjects] = useState<string[]>([]);
   const [form, setForm] = useState<ApplicationForm>(emptyForm);
+  const [moduleInput, setModuleInput] = useState("");
+  const [moduleError, setModuleError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [subjectsLoading, setSubjectsLoading] = useState(true);
-  const [subjectsError, setSubjectsError] = useState("");
   const [pageError, setPageError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -97,11 +96,8 @@ export default function TutorApplicationPage() {
           return;
         }
 
-        const [applicationResponse, subjectsResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/tutor-applications/me`, { credentials: "include" }),
-          fetch(`${API_BASE_URL}/api/tutor-applications/subjects`, { credentials: "include" })
-        ]);
-        if (applicationResponse.status === 401 || subjectsResponse.status === 401) {
+        const applicationResponse = await fetch(`${API_BASE_URL}/api/tutor-applications/me`, { credentials: "include" });
+        if (applicationResponse.status === 401) {
           router.replace("/login?next=%2Ftutor%2Fapplication");
           return;
         }
@@ -137,22 +133,12 @@ export default function TutorApplicationPage() {
           });
         }
 
-        if (subjectsResponse.ok) {
-          const subjectsData = await subjectsResponse.json();
-          if (!cancelled) setSubjects(Array.isArray(subjectsData.subjects) ? subjectsData.subjects : []);
-        } else if (!cancelled) {
-          console.error(`GET /api/tutor-applications/subjects failed with HTTP ${subjectsResponse.status}.`);
-          setSubjectsError(subjectsResponse.status === 404
-            ? "Tutor application routes are not available on the configured API. Deploy the latest backend."
-            : "Available subjects could not be loaded.");
-        }
       } catch (error) {
         console.error("Tutor application load failed:", error);
         if (!cancelled) setPageError(error instanceof Error ? error.message : "We could not load your application. Please try again.");
       } finally {
         if (!cancelled) {
           setLoading(false);
-          setSubjectsLoading(false);
         }
       }
     }
@@ -167,12 +153,33 @@ export default function TutorApplicationPage() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function toggleSubject(subject: string) {
+  function addModule(value = moduleInput) {
+    const moduleName = value.trim();
+    setModuleError("");
+    if (!moduleName) {
+      setModuleError("Enter a module name first.");
+      return;
+    }
+    if (moduleName.length > 100) {
+      setModuleError("Module names must be 100 characters or fewer.");
+      return;
+    }
+    if (form.subjects.some((subject) => subject.toLowerCase() === moduleName.toLowerCase())) {
+      setModuleError("That module is already on your list.");
+      return;
+    }
+    if (form.subjects.length >= 20) {
+      setModuleError("You can add up to 20 modules.");
+      return;
+    }
+    setForm((current) => ({ ...current, subjects: [...current.subjects, moduleName] }));
+    setModuleInput("");
+  }
+
+  function removeModule(moduleName: string) {
     setForm((current) => ({
       ...current,
-      subjects: current.subjects.includes(subject)
-        ? current.subjects.filter((selected) => selected !== subject)
-        : [...current.subjects, subject]
+      subjects: current.subjects.filter((subject) => subject !== moduleName)
     }));
   }
 
@@ -180,7 +187,7 @@ export default function TutorApplicationPage() {
     event.preventDefault();
     setSubmitError("");
     if (form.subjects.length === 0) {
-      setSubmitError("Select at least one subject.");
+      setSubmitError("Add at least one module you can tutor.");
       return;
     }
     const rate = Number(form.proposedHourlyRate);
@@ -218,89 +225,90 @@ export default function TutorApplicationPage() {
   const submitted = Boolean(application?.submittedAt);
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] text-[#241B3B]">
       <Navbar />
       <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10 sm:px-8">
         <div className="mb-8">
-          <p className="text-sm font-semibold uppercase text-amber-700">Tutor applications</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Tutor Application</h1>
-          <p className="mt-2 text-sm text-slate-600">Tutor access is granted only after an application is reviewed and approved.</p>
+          <p className="text-sm font-semibold uppercase tracking-wider text-[#6C4CF1]">Tutor applications</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#241B3B]">Tutor Application</h1>
+          <p className="mt-2 text-sm text-[#625B71]">Tutor access is granted only after an application is reviewed and approved.</p>
         </div>
 
         {loading ? (
-          <p className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600" role="status">Loading your application...</p>
+          <p className="rounded-xl border border-[#CFC4F8] bg-white/80 p-6 text-sm text-[#625B71] backdrop-blur-sm" role="status">Loading your application...</p>
         ) : pageError ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-800" role="alert">{pageError}</div>
+          <div className="rounded-xl border border-[#EF4444] bg-[#EF4444]/10 p-6 text-sm text-[#EF4444] font-medium backdrop-blur-sm" role="alert">{pageError}</div>
         ) : application?.status === "APPROVED" ? (
-          <section className="border-l-4 border-emerald-500 bg-white p-6 shadow-sm sm:p-8">
-            <p className="text-xs font-bold uppercase text-emerald-700">Application status</p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">Tutor application approved</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">Your tutor application has been approved. Tutor access is now available.</p>
-            <p className="mt-3 text-xs text-slate-500">Submitted {formatDate(application.submittedAt)}</p>
-            <a href="/dashboard/tutor" className="mt-6 inline-flex rounded-lg bg-amber-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-300">Open Tutor Dashboard</a>
+          <section className="rounded-xl border-l-4 border-[#22C55E] border-y border-r border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm sm:p-8">
+            <p className="text-xs font-bold uppercase text-[#22C55E]">Application status</p>
+            <h2 className="mt-2 text-2xl font-bold text-[#241B3B]">Tutor application approved</h2>
+            <p className="mt-3 text-sm leading-6 text-[#625B71]">Your tutor application has been approved. Tutor access is now available.</p>
+            <p className="mt-3 text-xs text-[#625B71]">Submitted {formatDate(application.submittedAt)}</p>
+            <a href="/dashboard/tutor" style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }} className="mt-6 inline-flex rounded-lg px-5 py-3 text-sm font-semibold text-white shadow-md hover:opacity-95">Open Tutor Dashboard</a>
           </section>
         ) : application?.status === "REJECTED" && submitted ? (
-          <section className="border-l-4 border-slate-400 bg-white p-6 shadow-sm sm:p-8">
-            <p className="text-xs font-bold uppercase text-slate-600">Application status</p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">Application not approved</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">Your tutor application was not approved. Please contact EasyLearning support if you need clarification.</p>
-            {application.rejectionReason && <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-700">{application.rejectionReason}</p>}
-            <p className="mt-3 text-xs text-slate-500">Submitted {formatDate(application.submittedAt)}</p>
+          <section className="rounded-xl border-l-4 border-[#EF4444] border-y border-r border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm sm:p-8">
+            <p className="text-xs font-bold uppercase text-[#EF4444]">Application status</p>
+            <h2 className="mt-2 text-2xl font-bold text-[#241B3B]">Application not approved</h2>
+            <p className="mt-3 text-sm leading-6 text-[#625B71]">Your tutor application was not approved. Please contact EasyLearning support if you need clarification.</p>
+            {application.rejectionReason && <p className="mt-4 border-t border-[#CFC4F8]/40 pt-4 text-sm text-[#241B3B]">{application.rejectionReason}</p>}
+            <p className="mt-3 text-xs text-[#625B71]">Submitted {formatDate(application.submittedAt)}</p>
           </section>
         ) : submitted ? (
-          <section className="border-l-4 border-amber-400 bg-white p-6 shadow-sm sm:p-8">
-            <p className="text-xs font-bold uppercase text-amber-700">Application status: Pending</p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">Tutor application submitted</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">Thank you for applying to become an EasyLearning tutor. Your application is pending review.</p>
-            <p className="mt-3 text-xs text-slate-500">Submitted {formatDate(application?.submittedAt || null)}</p>
+          <section className="rounded-xl border-l-4 border-[#FF8A4C] border-y border-r border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm sm:p-8">
+            <p className="text-xs font-bold uppercase text-[#FF8A4C]">Application status: Pending</p>
+            <h2 className="mt-2 text-2xl font-bold text-[#241B3B]">Tutor application submitted</h2>
+            <p className="mt-3 text-sm leading-6 text-[#625B71]">Thank you for applying to become an EasyLearning tutor. Your application is pending review.</p>
+            <p className="mt-3 text-xs text-[#625B71]">Submitted {formatDate(application?.submittedAt || null)}</p>
             {!application?.emailVerified && (
-              <p className="mt-5 border-t border-amber-100 pt-4 text-sm leading-6 text-amber-900">
+              <p className="mt-5 border-t border-[#CFC4F8]/40 pt-4 text-sm leading-6 text-[#FF8A4C]">
                 Email verification is not configured, and your email is not marked as verified. Verification is not required for an administrator to review this application.
               </p>
             )}
           </section>
         ) : !application && !applicationStarted ? (
-          <section className="border-l-4 border-amber-400 bg-white p-6 shadow-sm sm:p-8">
-            <p className="text-xs font-bold uppercase text-slate-500">Application status</p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">No tutor application has been submitted yet.</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">You can start an application while continuing to use your Student account.</p>
+          <section className="rounded-xl border-l-4 border-[#6C4CF1] border-y border-r border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm sm:p-8">
+            <p className="text-xs font-bold uppercase text-[#6C4CF1]">Application status</p>
+            <h2 className="mt-2 text-2xl font-bold text-[#241B3B]">No tutor application has been submitted yet.</h2>
+            <p className="mt-3 text-sm leading-6 text-[#625B71]">You can start an application while continuing to use your Student account.</p>
             <button
               type="button"
               onClick={() => setApplicationStarted(true)}
-              className="mt-6 inline-flex rounded-lg bg-amber-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-300"
+              style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }}
+              className="mt-6 inline-flex rounded-lg px-5 py-3 text-sm font-semibold text-white shadow-md hover:opacity-95"
             >
               Start Tutor Application
             </button>
           </section>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6 rounded-2xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm sm:p-8">
             {application?.source === "LEGACY" && (
-              <div className="border-l-4 border-amber-400 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+              <div className="rounded-lg border-l-4 border-[#FF8A4C] bg-[#FF8A4C]/10 p-4 text-sm leading-6 text-[#241B3B]">
                 Your existing Tutor access is paused while this application is reviewed. Complete and submit this form to request approval; your account and existing profile data are preserved.
               </div>
             )}
 
-            <div className="grid gap-4 border-b border-slate-200 pb-6 sm:grid-cols-2">
-              <div><p className="text-xs font-semibold uppercase text-slate-500">Applicant</p><p className="mt-1 font-semibold text-slate-900">{applicant?.firstName} {applicant?.lastName}</p></div>
-              <div><p className="text-xs font-semibold uppercase text-slate-500">Student email</p><p className="mt-1 break-all font-semibold text-slate-900">{applicant?.email}</p></div>
-              <div><p className="text-xs font-semibold uppercase text-slate-500">Institution</p><p className="mt-1 font-semibold text-slate-900">{applicant?.institution}</p></div>
+            <div className="grid gap-4 border-b border-[#CFC4F8]/40 pb-6 sm:grid-cols-2">
+              <div><p className="text-xs font-semibold uppercase text-[#625B71]">Applicant</p><p className="mt-1 font-semibold text-[#241B3B]">{applicant?.firstName} {applicant?.lastName}</p></div>
+              <div><p className="text-xs font-semibold uppercase text-[#625B71]">Student email</p><p className="mt-1 break-all font-semibold text-[#241B3B]">{applicant?.email}</p></div>
+              <div><p className="text-xs font-semibold uppercase text-[#625B71]">Institution</p><p className="mt-1 font-semibold text-[#241B3B]">{applicant?.institution}</p></div>
             </div>
 
             <form onSubmit={submitApplication} className="space-y-7">
               <section aria-labelledby="academic-heading">
-                <h2 id="academic-heading" className="text-lg font-bold text-slate-950">Academic information</h2>
+                <h2 id="academic-heading" className="text-lg font-bold text-[#241B3B]">Academic information</h2>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="student-number" className="mb-1.5 block text-sm font-medium text-slate-700">Student number <span className="font-normal text-slate-500">(optional)</span></label>
-                    <input id="student-number" value={form.studentNumber} maxLength={80} onChange={(event) => updateForm("studentNumber", event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500" />
+                    <label htmlFor="student-number" className="mb-1.5 block text-sm font-medium text-[#241B3B]">Student number <span className="font-normal text-[#625B71]">(optional)</span></label>
+                    <input id="student-number" value={form.studentNumber} maxLength={80} onChange={(event) => updateForm("studentNumber", event.target.value)} className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
                   </div>
                   <div>
-                    <label htmlFor="programme" className="mb-1.5 block text-sm font-medium text-slate-700">Programme or course</label>
-                    <input id="programme" required maxLength={200} value={form.programme} onChange={(event) => updateForm("programme", event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500" />
+                    <label htmlFor="programme" className="mb-1.5 block text-sm font-medium text-[#241B3B]">Programme or course</label>
+                    <input id="programme" required maxLength={200} value={form.programme} onChange={(event) => updateForm("programme", event.target.value)} className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
                   </div>
                   <div>
-                    <label htmlFor="year-of-study" className="mb-1.5 block text-sm font-medium text-slate-700">Year of study</label>
-                    <select id="year-of-study" required value={form.yearOfStudy} onChange={(event) => updateForm("yearOfStudy", event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500">
+                    <label htmlFor="year-of-study" className="mb-1.5 block text-sm font-medium text-[#241B3B]">Year of study</label>
+                    <select id="year-of-study" required value={form.yearOfStudy} onChange={(event) => updateForm("yearOfStudy", event.target.value)} className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30">
                       <option value="">Select year</option>
                       {Array.from({ length: 12 }, (_, index) => index + 1).map((year) => <option key={year} value={year}>{year}</option>)}
                     </select>
@@ -309,58 +317,89 @@ export default function TutorApplicationPage() {
               </section>
 
               <section aria-labelledby="tutoring-heading">
-                <h2 id="tutoring-heading" className="text-lg font-bold text-slate-950">Tutoring information</h2>
+                <h2 id="tutoring-heading" className="text-lg font-bold text-[#241B3B]">Tutoring information</h2>
                 <div className="mt-4 space-y-4">
                   <div>
-                    <label htmlFor="motivation" className="mb-1.5 block text-sm font-medium text-slate-700">Why do you want to become a tutor?</label>
-                    <textarea id="motivation" required minLength={20} maxLength={3000} rows={4} value={form.motivation} onChange={(event) => updateForm("motivation", event.target.value)} className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500" />
+                    <label htmlFor="motivation" className="mb-1.5 block text-sm font-medium text-[#241B3B]">Why do you want to become a tutor?</label>
+                    <textarea id="motivation" required minLength={20} maxLength={3000} rows={4} value={form.motivation} onChange={(event) => updateForm("motivation", event.target.value)} className="w-full resize-y rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
                   </div>
                   <div>
-                    <label htmlFor="experience" className="mb-1.5 block text-sm font-medium text-slate-700">Tutoring experience <span className="font-normal text-slate-500">(optional)</span></label>
-                    <textarea id="experience" maxLength={3000} rows={3} value={form.experience} onChange={(event) => updateForm("experience", event.target.value)} className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500" />
+                    <label htmlFor="experience" className="mb-1.5 block text-sm font-medium text-[#241B3B]">Tutoring experience <span className="font-normal text-[#625B71]">(optional)</span></label>
+                    <textarea id="experience" maxLength={3000} rows={3} value={form.experience} onChange={(event) => updateForm("experience", event.target.value)} className="w-full resize-y rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
                   </div>
                   <div>
-                    <label htmlFor="skills-description" className="mb-1.5 block text-sm font-medium text-slate-700">Describe your knowledge and skills</label>
-                    <textarea id="skills-description" required minLength={20} maxLength={3000} rows={4} value={form.skillsDescription} onChange={(event) => updateForm("skillsDescription", event.target.value)} className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500" />
+                    <label htmlFor="skills-description" className="mb-1.5 block text-sm font-medium text-[#241B3B]">Describe your knowledge and skills</label>
+                    <textarea id="skills-description" required minLength={20} maxLength={3000} rows={4} value={form.skillsDescription} onChange={(event) => updateForm("skillsDescription", event.target.value)} className="w-full resize-y rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
                   </div>
                 </div>
               </section>
 
               <section aria-labelledby="subjects-heading">
-                <h2 id="subjects-heading" className="text-lg font-bold text-slate-950">Subjects I can tutor</h2>
-                <p className="mt-1 text-sm text-slate-600">Choose from subjects currently listed in EasyLearning.</p>
-                {subjectsLoading ? (
-                  <p className="mt-4 text-sm text-slate-500" role="status">Loading subjects...</p>
-                ) : subjectsError ? (
-                  <p className="mt-4 text-sm text-red-700" role="alert">{subjectsError}</p>
-                ) : subjects.length === 0 ? (
-                  <p className="mt-4 border border-dashed border-slate-300 p-4 text-sm text-slate-600">No subjects are available yet. Applications cannot be submitted until subjects exist in EasyLearning.</p>
-                ) : (
-                  <fieldset className="mt-4 grid gap-2 sm:grid-cols-2">
-                    <legend className="sr-only">Available tutoring subjects</legend>
-                    {subjects.map((subject) => (
-                      <label key={subject} className="flex cursor-pointer items-center gap-3 border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800 hover:border-amber-400">
-                        <input type="checkbox" checked={form.subjects.includes(subject)} onChange={() => toggleSubject(subject)} className="h-4 w-4 accent-amber-500" />
-                        {subject}
-                      </label>
+                <h2 id="subjects-heading" className="text-lg font-bold text-[#241B3B]">Modules I can tutor</h2>
+                <p className="mt-1 text-sm text-[#625B71]">Enter each module you can tutor and add it to your list.</p>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <label htmlFor="tutor-module" className="sr-only">Module you can tutor</label>
+                  <input
+                    id="tutor-module"
+                    value={moduleInput}
+                    maxLength={100}
+                    onChange={(event) => {
+                      setModuleInput(event.target.value);
+                      setModuleError("");
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addModule();
+                      }
+                    }}
+                    placeholder="e.g. Data Structures"
+                    disabled={submitting || form.subjects.length >= 20}
+                    className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addModule()}
+                    disabled={submitting || form.subjects.length >= 20}
+                    className="min-h-10 shrink-0 rounded-lg border border-[#6C4CF1] px-4 py-2 text-sm font-semibold text-[#6C4CF1] transition hover:bg-[#6C4CF1]/5 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Add module
+                  </button>
+                </div>
+                {moduleError && <p className="mt-2 text-sm font-medium text-[#EF4444]" role="alert">{moduleError}</p>}
+                {form.subjects.length > 0 && (
+                  <ul className="mt-4 flex flex-wrap gap-2" aria-label="Modules you can tutor">
+                    {form.subjects.map((subject) => (
+                      <li key={subject} className="flex items-center gap-2 rounded-lg border border-[#CFC4F8] bg-white px-3 py-2 text-sm text-[#241B3B]">
+                        <span>{subject}</span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${subject}`}
+                          onClick={() => removeModule(subject)}
+                          disabled={submitting}
+                          className="font-semibold text-[#625B71] hover:text-[#EF4444] disabled:cursor-not-allowed"
+                        >
+                          x
+                        </button>
+                      </li>
                     ))}
-                  </fieldset>
+                  </ul>
                 )}
               </section>
 
               <section aria-labelledby="rate-heading">
-                <h2 id="rate-heading" className="text-lg font-bold text-slate-950">Proposed hourly rate</h2>
-                <label htmlFor="hourly-rate" className="mt-3 block text-sm font-medium text-slate-700">Rate in rand per hour</label>
+                <h2 id="rate-heading" className="text-lg font-bold text-[#241B3B]">Proposed hourly rate</h2>
+                <label htmlFor="hourly-rate" className="mt-3 block text-sm font-medium text-[#241B3B]">Rate in rand per hour</label>
                 <div className="mt-1.5 flex max-w-sm items-center gap-2">
-                  <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-3 py-2.5 text-sm font-semibold text-slate-600">R</span>
-                  <input id="hourly-rate" type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" required value={form.proposedHourlyRate} onChange={(event) => updateForm("proposedHourlyRate", event.target.value)} className="w-full rounded-r-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500" />
+                  <span className="rounded-l-lg border border-r-0 border-[#CFC4F8] bg-[#EDE7FF] px-3 py-2.5 text-sm font-semibold text-[#6C4CF1]">R</span>
+                  <input id="hourly-rate" type="number" inputMode="decimal" min="0.01" max="100000" step="0.01" required value={form.proposedHourlyRate} onChange={(event) => updateForm("proposedHourlyRate", event.target.value)} className="w-full rounded-r-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
                 </div>
               </section>
 
-              {submitError && <p className="text-sm text-red-700" role="alert">{submitError}</p>}
-              <div className="border-t border-slate-200 pt-5">
-                <p className="mb-4 text-xs leading-5 text-slate-500">Email verification is not available yet. Submitting records a pending application; it does not verify your email or grant Tutor access.</p>
-                <button type="submit" disabled={submitting || subjectsLoading || Boolean(subjectsError) || subjects.length === 0} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-amber-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60">
+              {submitError && <p className="text-sm font-medium text-[#EF4444]" role="alert">{submitError}</p>}
+              <div className="border-t border-[#CFC4F8]/40 pt-5">
+                <p className="mb-4 text-xs leading-5 text-[#625B71]">Email verification is not available yet. Submitting records a pending application; it does not verify your email or grant Tutor access.</p>
+                <button type="submit" disabled={submitting} style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }} className="inline-flex min-h-11 items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60">
                   {submitting ? "Submitting application..." : "Submit Application"}
                 </button>
               </div>

@@ -1,0 +1,67 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Probe Session API URLs",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"-e",
+				"(async()=>{for(const u of ['http://localhost:5000/api/session-requests/mine','http://localhost:3000/api/session-requests/mine']){try{const r=await fetch(u,{signal:AbortSignal.timeout(3000)});const t=await r.text();console.log(JSON.stringify({url:u,status:r.status,contentType:r.headers.get('content-type'),preview:t.slice(0,160).replace(/\\s+/g,' ')}))}catch(e){console.log(JSON.stringify({url:u,error:e.cause?.code||e.name}))}}})()"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Probe Session API URLs",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"-e",
+				"(async()=>{for(const u of [\"http://localhost:5000/api/session-requests/mine\",\"http://localhost:3000/api/session-requests/mine\"]){try{const r=await fetch(u,{signal:AbortSignal.timeout(3000)});const t=await r.text();console.log(JSON.stringify({url:u,status:r.status,contentType:r.headers.get(\"content-type\"),preview:t.slice(0,160).replace(/\\s+/g,\" \")}))}catch(e){console.log(JSON.stringify({url:u,error:e.cause?.code||e.name}))}}})()"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Probe Express Session Endpoint",
+			"type": "shell",
+			"command": "curl.exe",
+			"args": [
+				"-sS",
+				"-i",
+				"--max-time",
+				"4",
+				"http://localhost:5000/api/session-requests/mine"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Probe Next Session Endpoint",
+			"type": "shell",
+			"command": "curl.exe",
+			"args": [
+				"-sS",
+				"-i",
+				"--max-time",
+				"4",
+				"http://localhost:3000/api/session-requests/mine"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check API Base Environment",
+			"type": "shell",
+			"command": "cmd.exe",
+			"args": [
+				"/d",
+				"/c",
+				"if defined NEXT_PUBLIC_API_URL (echo NEXT_PUBLIC_API_URL_SET) else (echo NEXT_PUBLIC_API_URL_UNSET)"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

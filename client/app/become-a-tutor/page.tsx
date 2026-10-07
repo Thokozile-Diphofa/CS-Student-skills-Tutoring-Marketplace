@@ -66,15 +66,15 @@ export default function BecomeATutorPage() {
         : "Apply to Become a Tutor";
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] text-[#241B3B]">
       <Navbar />
       <main className="mx-auto flex w-full max-w-5xl flex-1 items-center px-5 py-14 sm:px-8">
-        <section className="w-full border-l-4 border-amber-400 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-10">
-          <p className="text-sm font-semibold uppercase text-amber-700">Tutor applications</p>
-          <h1 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+        <section className="w-full rounded-2xl border-l-4 border-[#6C4CF1] border-y border-r border-[#CFC4F8] bg-white/80 px-6 py-8 shadow-sm backdrop-blur-sm sm:px-10 sm:py-10">
+          <p className="text-sm font-semibold uppercase tracking-wider text-[#6C4CF1]">Tutor applications</p>
+          <h1 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-[#241B3B] sm:text-4xl">
             Share what you know. Help another student move forward.
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600">
+          <p className="mt-5 max-w-2xl text-base leading-7 text-[#625B71]">
             EasyLearning students can apply to tutor subjects they know well. Applications are reviewed before tutor features are enabled.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -82,18 +82,19 @@ export default function BecomeATutorPage() {
               type="button"
               onClick={continueApplication}
               disabled={accountState === "checking" || accountState === "unavailable"}
-              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-amber-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }}
+              className="inline-flex min-h-11 items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {buttonLabel}
             </button>
             {accountState === "signed-out" && (
-              <p className="text-sm text-slate-600">Already have an account? <Link className="font-semibold text-amber-700 hover:text-amber-600" href="/login?next=%2Ftutor%2Fapplication">Log in to continue.</Link></p>
+              <p className="text-sm text-[#625B71]">Already have an account? <Link className="font-semibold text-[#6C4CF1] hover:text-[#8B5CF6]" href="/login?next=%2Ftutor%2Fapplication">Log in to continue.</Link></p>
             )}
             {accountState === "unavailable" && (
-              <p className="text-sm text-red-700" role="alert">We could not check your account. Please reload and try again.</p>
+              <p className="text-sm font-medium text-[#EF4444]" role="alert">We could not check your account. Please reload and try again.</p>
             )}
           </div>
-          <p className="mt-6 max-w-2xl text-xs leading-5 text-slate-500">
+          <p className="mt-6 max-w-2xl text-xs leading-5 text-[#625B71]">
             Applying does not grant Tutor access. You can continue using your Student account while your application is reviewed.
           </p>
         </section>

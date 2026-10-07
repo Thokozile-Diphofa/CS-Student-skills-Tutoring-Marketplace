@@ -61,28 +61,28 @@ export default function DashboardShell({ role, activeItem, user, children }: Das
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-800 bg-slate-950 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] text-[#241B3B]">
+      <header className="border-b border-[#6C4CF1]/30 bg-[#241B3B] text-white shadow-md">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <Link href={isTutor ? "/dashboard/tutor" : "/dashboard/student"} className="flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-lg font-black text-slate-950">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FFD166] text-lg font-black text-[#241B3B] shadow-sm">
               E
             </span>
-            <span className="text-xl font-bold tracking-tight">EasyLearning</span>
+            <span className="text-xl font-bold tracking-tight text-white">EasyLearning</span>
           </Link>
 
           <div className="flex items-center gap-3">
             <span className={`hidden rounded-full border px-3 py-1 text-xs font-bold sm:inline-flex ${
               isTutor
-                ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
-                : "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                ? "border-[#22C55E]/40 bg-[#22C55E]/20 text-[#22C55E]"
+                : "border-[#FFD166]/40 bg-[#FFD166]/20 text-[#FFD166]"
             }`}>
               {isTutor ? "TUTOR DASHBOARD" : "STUDENT DASHBOARD"}
             </span>
             {canSwitchDashboard && (
               <Link
                 href={isTutor ? "/dashboard/student" : "/dashboard/tutor"}
-                className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-900"
+                className="rounded-lg border border-white/20 px-3 py-2 text-xs font-semibold text-[#EDE7FF] transition hover:bg-white/10 hover:text-white"
               >
                 {isTutor ? "Student view" : "Tutor view"}
               </Link>
@@ -91,14 +91,14 @@ export default function DashboardShell({ role, activeItem, user, children }: Das
               type="button"
               onClick={handleLogout}
               disabled={loggingOut}
-              className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-white transition hover:border-slate-500 hover:bg-slate-900 disabled:opacity-60"
+              className="rounded-lg bg-[#6C4CF1] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#8B5CF6] disabled:opacity-60"
             >
               {loggingOut ? "Logging out..." : "Logout"}
             </button>
           </div>
         </div>
 
-        <nav aria-label={`${role.toLowerCase()} dashboard navigation`} className="border-t border-slate-800">
+        <nav aria-label={`${role.toLowerCase()} dashboard navigation`} className="border-t border-white/10">
           <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 sm:px-7">
             {navigationByRole[role].map((item) => (
               <Link
@@ -107,8 +107,8 @@ export default function DashboardShell({ role, activeItem, user, children }: Das
                 aria-current={activeItem === item.label ? "page" : undefined}
                 className={`shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition ${
                   activeItem === item.label
-                    ? "border-amber-400 text-amber-300"
-                    : "border-transparent text-slate-300 hover:text-white"
+                    ? "border-[#FFD166] font-semibold text-[#FFD166]"
+                    : "border-transparent text-[#EDE7FF] hover:text-white"
                 }`}
               >
                 {item.label}

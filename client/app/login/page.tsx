@@ -96,52 +96,66 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
-      <div className="mx-auto max-w-6xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+    <div className="min-h-screen bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+      <div className="mx-auto max-w-6xl overflow-hidden rounded-[2rem] border border-[#CFC4F8] bg-white/70 shadow-lg backdrop-blur-sm">
         <div className="grid lg:min-h-[680px] lg:grid-cols-2">
-          <div className="flex items-center justify-center bg-slate-950 px-5 py-9 text-white sm:px-10 sm:py-12">
+          {/* LEFT SIDE: Vibrant purple gradient */}
+          <div
+            className="flex items-center justify-center px-5 py-9 text-white sm:px-10 sm:py-12"
+            style={{ background: "linear-gradient(135deg, #6C4CF1 0%, #8B5CF6 100%)" }}
+          >
             <div className="max-w-md">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400 text-lg font-black text-slate-950">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FFD166] text-lg font-black text-[#241B3B] shadow-sm">
                   E
                 </div>
-                <span className="text-2xl font-bold">EasyLearning</span>
+                <span className="text-2xl font-bold text-white tracking-tight">EasyLearning</span>
               </div>
 
-              <h1 className="mt-8 text-3xl font-bold tracking-tight sm:mt-10 sm:text-4xl">Welcome back</h1>
-              <p className="mt-4 text-base text-slate-300">
+              <h1 className="mt-8 text-3xl font-bold tracking-tight text-white sm:mt-10 sm:text-4xl">Welcome back</h1>
+              <p className="mt-4 text-base text-[#EDE7FF]">
                 Continue learning with student tutors who understand your course goals and academic journey.
               </p>
 
               <div className="mt-10 space-y-4">
-                <div className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4">
-                  <p className="text-sm text-slate-300">Popular subject support</p>
+                <div
+                  className="rounded-2xl border border-white/20 p-4 shadow-sm"
+                  style={{ background: "rgba(255, 255, 255, 0.12)" }}
+                >
+                  <p className="text-sm font-medium text-[#EDE7FF]">Popular subject support</p>
                   <p className="mt-2 text-lg font-semibold text-white">Computer Science & Mathematics</p>
                 </div>
-                <div className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4">
-                  <p className="text-sm text-slate-300">Helpful tutors</p>
+                <div
+                  className="rounded-2xl border border-white/20 p-4 shadow-sm"
+                  style={{ background: "rgba(255, 255, 255, 0.12)" }}
+                >
+                  <p className="text-sm font-medium text-[#EDE7FF]">Helpful tutors</p>
                   <p className="mt-2 text-lg font-semibold text-white">Verified student mentors</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-center bg-white px-5 py-9 sm:px-10 sm:py-12">
+          {/* RIGHT SIDE: Warm colourful gradient (soft peach -> lavender) */}
+          <div
+            className="flex items-center justify-center px-5 py-9 sm:px-10 sm:py-12"
+            style={{ background: "linear-gradient(135deg, #FFE8DD 0%, #EDE7FF 100%)" }}
+          >
             <div className="w-full max-w-md">
               <div className="mb-8">
-                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-600">Login</p>
-                <h2 className="mt-2 text-3xl font-bold text-slate-900">Access your account</h2>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#6C4CF1]">Login</p>
+                <h2 className="mt-2 text-3xl font-bold text-[#241B3B]">Access your account</h2>
               </div>
 
               {errorMessage && (
-                <div className="mb-6 break-words rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-600">
+                <div className="mb-6 break-words rounded-xl border border-[#EF4444] bg-[#EF4444]/10 p-4 text-sm font-medium text-[#EF4444]">
                   {errorMessage}
                 </div>
               )}
 
               <form onSubmit={handleLoginSubmit} className="space-y-5">
                 <div>
-                  <label htmlFor="email" className="mb-2 block text-sm font-medium text-slate-700">
+                  <label htmlFor="email" className="mb-2 block text-sm font-medium text-[#241B3B]">
                     Email
                   </label>
                   <input
@@ -150,13 +164,14 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="student@university.ac.za"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                    style={{ background: "rgba(255, 255, 255, 0.55)" }}
+                    className="w-full rounded-xl border border-[#CFC4F8] px-4 py-3 text-[#241B3B] placeholder-[#625B71] outline-none transition focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white"
                     disabled={loading}
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-700">
+                  <label htmlFor="password" className="mb-2 block text-sm font-medium text-[#241B3B]">
                     Password
                   </label>
                   <div className="relative">
@@ -166,13 +181,14 @@ export default function LoginPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-11 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                      style={{ background: "rgba(255, 255, 255, 0.55)" }}
+                      className="w-full rounded-xl border border-[#CFC4F8] px-4 py-3 pr-11 text-[#241B3B] placeholder-[#625B71] outline-none transition focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white"
                       disabled={loading}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
-                      className="absolute inset-y-0 right-3 flex items-center text-sm font-medium text-slate-500 hover:text-slate-700"
+                      className="absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#625B71] hover:text-[#241B3B]"
                     >
                       {showPassword ? "Hide" : "Show"}
                     </button>
@@ -180,11 +196,11 @@ export default function LoginPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm">
-                  <label className="flex items-center gap-2 text-slate-600">
-                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400" />
+                  <label className="flex items-center gap-2 text-[#625B71]">
+                    <input type="checkbox" className="h-4 w-4 rounded border-[#CFC4F8] accent-[#6C4CF1] focus:ring-[#6C4CF1]" />
                     Remember me
                   </label>
-                  <Link href="/login" className="font-medium text-amber-600 hover:text-amber-500">
+                  <Link href="/login" className="font-semibold text-[#6C4CF1] hover:text-[#8B5CF6]">
                     Forgot password?
                   </Link>
                 </div>
@@ -192,15 +208,18 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-xl bg-amber-400 px-4 py-3 font-semibold text-slate-900 transition hover:bg-amber-300 disabled:opacity-50"
+                  style={{
+                    background: loading ? "#8B5CF6" : "linear-gradient(90deg, #6C4CF1, #8B5CF6)",
+                  }}
+                  className="w-full rounded-xl px-4 py-3 font-semibold text-white shadow-md transition hover:opacity-95 disabled:opacity-50"
                 >
                   {loading ? "Logging in..." : "Login"}
                 </button>
               </form>
 
-              <p className="mt-6 text-center text-sm text-slate-600">
+              <p className="mt-6 text-center text-sm text-[#625B71]">
                 Don’t have an account?{" "}
-                <Link href="/register" className="font-semibold text-amber-600 hover:text-amber-500">
+                <Link href="/register" className="font-semibold text-[#6C4CF1] hover:text-[#8B5CF6]">
                   Register
                 </Link>
               </p>

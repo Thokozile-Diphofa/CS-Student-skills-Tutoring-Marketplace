@@ -110,9 +110,14 @@ Implemented tutor application routes:
 Implemented admin dashboard route:
 - `GET /api/admin/dashboard` (authenticated; requires `ADMIN`; returns overview counts, safe user records, and approved tutor profiles)
 
-Email verification, session-request, notification, messaging, booking, review, and
-reporting routes are not implemented yet. Keep this section in sync as future endpoints
-are added.
+Implemented session-request routes:
+- `POST /api/session-requests` (authenticated; requires `STUDENT`; creates a PENDING request for an approved tutor using the authenticated student ID)
+- `GET /api/session-requests/mine` (authenticated; requires `STUDENT`; returns only the current student's requests)
+- `GET /api/session-requests/incoming` (authenticated; requires `TUTOR`; returns only requests addressed to the current tutor)
+- `PATCH /api/session-requests/:id/respond` (authenticated; requires `TUTOR`; accepts or declines a PENDING request addressed to the current tutor)
+
+Email verification, notification, messaging, booking, review, and reporting routes
+are not implemented yet. Keep this section in sync as future endpoints are added.
 
 ## 7. Security
 
@@ -121,6 +126,10 @@ Never expose to the browser: password hashes, JWT signing secret, database crede
 Never run from the browser: password hashing, JWT verification, role checks (a user's ability
 to accept/decline a request as the target tutor must be checked server-side), report
 handling.
+
+Provision the dedicated `admin@universitydomain` account only with the trusted server command
+`npm run admin:bootstrap` in `server/`, using a server-only `ADMIN_PASSWORD` environment
+variable. Never provision ADMIN through public registration or commit/log the password.
 
 ## 8. Code standards
 

@@ -2,6 +2,8 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../db");
+const { DEDICATED_ADMIN_EMAIL } = require("../adminConfig");
+const { validateStudentEmail } = require("../universities");
 const { authenticateToken } = require("../middleware/auth");
 const { getEffectiveRoles } = require("../services/tutorApplications");
 
@@ -49,9 +51,50 @@ async function ensureSchema() {
     if (hasLegacyColumn.rows.length > 0) {
       await client.query(`
         INSERT INTO user_roles (user_id, role)
-        SELECT id, role FROM users WHERE role IS NOT NULL
+        SELECT
+          u.id,
+          CASE
+            WHEN UPPER(u.role) = 'ADMIN' AND LOWER(u.email) <> $1 THEN 'STUDENT'
+            ELSE UPPER(u.role)
+          END
+        FROM users u
+        WHERE u.role IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM user_roles existing_role WHERE existing_role.user_id = u.id
+          )
         ON CONFLICT (user_id, role) DO NOTHING;
-      `);
+      `, [DEDICATED_ADMIN_EMAIL]);
+
+      await client.query(`
+        DELETE FROM user_roles stale_admin
+        USING users u
+        WHERE stale_admin.user_id = u.id
+          AND stale_admin.role = 'ADMIN'
+          AND LOWER(u.email) <> $1
+          AND EXISTS (
+            SELECT 1
+            FROM user_roles preserved_role
+            WHERE preserved_role.user_id = u.id
+              AND preserved_role.role IN ('STUDENT', 'TUTOR')
+          );
+      `, [DEDICATED_ADMIN_EMAIL]);
+
+      await client.query(`
+        UPDATE users u
+        SET role = CASE
+          WHEN EXISTS (
+            SELECT 1 FROM user_roles ur
+            WHERE ur.user_id = u.id AND ur.role = 'STUDENT'
+          ) THEN 'STUDENT'
+          ELSE 'TUTOR'
+        END
+        WHERE UPPER(u.role) = 'ADMIN'
+          AND LOWER(u.email) <> $1
+          AND EXISTS (
+            SELECT 1 FROM user_roles ur
+            WHERE ur.user_id = u.id AND ur.role IN ('STUDENT', 'TUTOR')
+          );
+      `, [DEDICATED_ADMIN_EMAIL]);
 
       // Keep legacy values for compatibility, but stop requiring this single-role column.
       await client.query("ALTER TABLE users ALTER COLUMN role DROP NOT NULL");
@@ -104,7 +147,20 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "All required fields must be provided." });
     }
 
+    if (typeof email !== "string") {
+      return res.status(400).json({ error: "Enter a valid university email address." });
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail === DEDICATED_ADMIN_EMAIL) {
+      return res.status(400).json({ error: "This email is reserved for platform administration." });
+    }
+
+    const universityValidation = validateStudentEmail(university, email);
+    if (universityValidation.error) {
+      return res.status(400).json({ error: universityValidation.error });
+    }
+
     const targetRole = role ? role.toUpperCase() : "STUDENT";
 
     if (!["STUDENT", "TUTOR"].includes(targetRole)) {
@@ -142,7 +198,7 @@ router.post("/register", async (req, res) => {
   [
     firstName.trim(),
     lastName.trim(),
-    university.trim(),
+    universityValidation.university.code,
     normalizedEmail,
     passwordHash
   ]

@@ -16,6 +16,20 @@ interface UserProfile {
   roles: string[];
 }
 
+interface SessionRequest {
+  id: number;
+  tutorId: number;
+  tutorFirstName: string;
+  tutorLastName: string;
+  subject: string;
+  requestedDate: string | null;
+  status: string;
+  hourlyRate: string | null;
+  paymentStatus: string | null;
+  payoutStatus: string | null;
+  currency: string | null;
+}
+
 interface OverviewMetricProps {
   label: string;
   value: string | number;
@@ -24,10 +38,10 @@ interface OverviewMetricProps {
 
 function OverviewMetric({ label, value, detail }: OverviewMetricProps) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
-      <p className="text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-3 text-2xl font-bold text-slate-950">{value}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
+    <section className="rounded-xl border border-[#CFC4F8] bg-white/80 p-5 shadow-sm backdrop-blur-sm">
+      <p className="text-sm font-medium text-[#625B71]">{label}</p>
+      <p className="mt-3 text-2xl font-bold text-[#241B3B]">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-[#625B71]">{detail}</p>
     </section>
   );
 }
@@ -39,6 +53,11 @@ export default function StudentDashboardPage() {
   const [authError, setAuthError] = useState("");
   const [availableTutors, setAvailableTutors] = useState<number | null>(null);
   const [tutorCountError, setTutorCountError] = useState(false);
+  const [sessionRequests, setSessionRequests] = useState<SessionRequest[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState("");
+  const [payingSessionId, setPayingSessionId] = useState<number | null>(null);
+  const [paymentError, setPaymentError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -60,9 +79,13 @@ export default function StudentDashboardPage() {
         const authenticatedUser: UserProfile | null = authData.user || null;
         const roles = authenticatedUser?.roles || [];
 
+        if (roles.includes("ADMIN")) {
+          router.replace("/dashboard/admin");
+          return;
+        }
+
         if (!roles.includes("STUDENT")) {
           if (roles.includes("TUTOR")) router.replace("/dashboard/tutor");
-          else if (roles.includes("ADMIN")) router.replace("/dashboard/admin");
           else router.replace("/login");
           return;
         }
@@ -83,6 +106,22 @@ export default function StudentDashboardPage() {
           console.error("Tutor count request failed:", error);
           if (!cancelled) setTutorCountError(true);
         }
+
+        try {
+          const sessionResponse = await fetch(`${API_BASE_URL}/api/session-requests/mine`, {
+            credentials: "include"
+          });
+          if (!sessionResponse.ok) throw new Error("Session requests could not be loaded.");
+          const sessionData = await sessionResponse.json();
+          if (!cancelled) {
+            setSessionRequests(Array.isArray(sessionData.sessionRequests) ? sessionData.sessionRequests : []);
+          }
+        } catch (error) {
+          console.error("Session requests request failed:", error);
+          if (!cancelled) setSessionsError("Your session requests could not be loaded.");
+        } finally {
+          if (!cancelled) setSessionsLoading(false);
+        }
       } catch (error) {
         console.error("Auth check failed:", error);
         if (!cancelled) setAuthError("We could not verify your account. Please try again.");
@@ -97,9 +136,57 @@ export default function StudentDashboardPage() {
     };
   }, [router]);
 
+  async function payForSession(sessionRequestId: number) {
+    setPaymentError("");
+    setPayingSessionId(sessionRequestId);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/payments/initialize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ sessionRequestId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Payment could not be initialized.");
+      if (typeof data.paymentUrl !== "string" || !data.fields || typeof data.fields !== "object") {
+        throw new Error("The payment service returned invalid checkout details.");
+      }
+
+      const checkoutForm = document.createElement("form");
+      checkoutForm.method = "POST";
+      checkoutForm.action = data.paymentUrl;
+      for (const [name, value] of Object.entries(data.fields)) {
+        if (typeof value !== "string") continue;
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+        checkoutForm.appendChild(input);
+      }
+      document.body.appendChild(checkoutForm);
+      checkoutForm.submit();
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : "Payment could not be initialized.");
+      setPayingSessionId(null);
+    }
+  }
+
+  function formatSessionFee(value: string | null) {
+    const amount = Number(value);
+    return Number.isFinite(amount) && amount > 0 ? `R${amount.toFixed(2)}` : "Unavailable";
+  }
+
+  function formatRequestedDate(value: string | null) {
+    if (!value) return "Not scheduled";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? "Date unavailable"
+      : new Intl.DateTimeFormat("en-ZA", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  }
+
   if (loading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-600">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] px-6 text-center text-[#625B71]">
         <p className="text-sm font-medium" role={authError ? "alert" : "status"}>
           {authError || "Verifying your student account..."}
         </p>
@@ -111,11 +198,11 @@ export default function StudentDashboardPage() {
     <DashboardShell role="STUDENT" activeItem="Dashboard" user={user}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-amber-700">Student Dashboard</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Welcome back, {user.firstName}</h1>
-          <p className="mt-2 text-sm text-slate-600">Your learning activity and student profile.</p>
+          <p className="text-sm font-semibold uppercase tracking-wider text-[#6C4CF1]">Student Dashboard</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-[#241B3B]">Welcome back, {user.firstName}</h1>
+          <p className="mt-2 text-sm text-[#625B71]">Your learning activity and student profile.</p>
         </div>
-        <p className="text-sm font-medium text-slate-500">{user.university}</p>
+        <p className="text-sm font-medium text-[#625B71]">{user.university}</p>
       </div>
 
       <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -126,46 +213,81 @@ export default function StudentDashboardPage() {
         />
         <OverviewMetric
           label="Pending Requests"
-          value="Not available"
-          detail="The session-request feature has not been implemented."
+          value={sessionsLoading ? "Loading" : sessionsError ? "Unavailable" : sessionRequests.filter((request) => request.status === "PENDING").length}
+          detail={sessionsError || "Requests awaiting a tutor response."}
         />
         <OverviewMetric
           label="Accepted Sessions"
-          value="Not available"
-          detail="Session booking data is not available yet."
+          value={sessionsLoading ? "Loading" : sessionsError ? "Unavailable" : sessionRequests.filter((request) => request.status === "ACCEPTED").length}
+          detail={sessionsError || "Requests accepted by tutors."}
         />
       </div>
 
-      <section className="mt-7 flex flex-col gap-5 rounded-xl border border-slate-200 bg-white p-6 sm:flex-row sm:items-center sm:justify-between">
+      <section className="mt-7 flex flex-col gap-5 rounded-xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-950">Find your next tutor</h2>
-          <p className="mt-1 text-sm text-slate-600">Search tutor profiles and filter by subject using the live tutor directory.</p>
+          <h2 className="text-lg font-bold text-[#241B3B]">Find your next tutor</h2>
+          <p className="mt-1 text-sm text-[#625B71]">Search tutor profiles and filter by subject using the live tutor directory.</p>
         </div>
         <Link
           href="/tutors"
-          className="inline-flex min-h-10 items-center justify-center rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-300"
+          style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }}
+          className="inline-flex min-h-10 items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95"
         >
           Find Tutors
         </Link>
       </section>
 
       <div className="mt-7 grid gap-5 lg:grid-cols-2">
-        <section id="profile" className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-bold text-slate-950">Profile</h2>
+        <section id="profile" className="scroll-mt-6 rounded-xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm">
+          <h2 className="text-lg font-bold text-[#241B3B]">Profile</h2>
           <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
-            <div><dt className="text-slate-500">Name</dt><dd className="mt-1 font-medium text-slate-900">{user.firstName} {user.lastName}</dd></div>
-            <div><dt className="text-slate-500">Email</dt><dd className="mt-1 break-all font-medium text-slate-900">{user.email}</dd></div>
-            <div><dt className="text-slate-500">University</dt><dd className="mt-1 font-medium text-slate-900">{user.university}</dd></div>
-            <div><dt className="text-slate-500">Roles</dt><dd className="mt-1 font-medium text-slate-900">{user.roles.join(", ")}</dd></div>
+            <div><dt className="text-[#625B71]">Name</dt><dd className="mt-1 font-medium text-[#241B3B]">{user.firstName} {user.lastName}</dd></div>
+            <div><dt className="text-[#625B71]">Email</dt><dd className="mt-1 break-all font-medium text-[#241B3B]">{user.email}</dd></div>
+            <div><dt className="text-[#625B71]">University</dt><dd className="mt-1 font-medium text-[#241B3B]">{user.university}</dd></div>
+            <div><dt className="text-[#625B71]">Roles</dt><dd className="mt-1 font-medium text-[#241B3B]">{user.roles.join(", ")}</dd></div>
           </dl>
         </section>
 
-        <section id="requests" className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-bold text-slate-950">My Session Requests</h2>
-          <div className="mt-4 border-l-2 border-amber-400 pl-4">
-            <p className="text-sm font-semibold text-slate-800">Requests you send to tutors will appear here.</p>
-            <p className="mt-1 text-sm leading-6 text-slate-600">Request tracking is not available yet, so sent requests and their statuses cannot be loaded.</p>
-          </div>
+        <section id="requests" className="scroll-mt-6 rounded-xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm">
+          <h2 className="text-lg font-bold text-[#241B3B]">My Session Requests</h2>
+          {paymentError && <p className="mt-4 text-sm font-medium text-[#EF4444]" role="alert">{paymentError}</p>}
+          {sessionsLoading ? (
+            <p className="mt-4 text-sm text-[#625B71]" role="status">Loading your session requests...</p>
+          ) : sessionsError ? (
+            <p className="mt-4 text-sm font-medium text-[#EF4444]" role="alert">{sessionsError}</p>
+          ) : sessionRequests.length === 0 ? (
+            <p className="mt-4 text-sm leading-6 text-[#625B71]">You have no session requests yet.</p>
+          ) : (
+            <ul className="mt-4 divide-y divide-[#CFC4F8]/60">
+              {sessionRequests.map((request) => {
+                const paid = request.paymentStatus === "PAID";
+                const acceptedAndUnpaid = request.status === "ACCEPTED" && !paid;
+                return (
+                  <li key={request.id} className="grid gap-4 py-5 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-center">
+                    <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                      <div><dt className="text-[#625B71]">Tutor</dt><dd className="mt-1 font-semibold text-[#241B3B]">{request.tutorFirstName} {request.tutorLastName}</dd></div>
+                      <div><dt className="text-[#625B71]">Subject</dt><dd className="mt-1 font-semibold text-[#241B3B]">{request.subject}</dd></div>
+                      <div><dt className="text-[#625B71]">Requested date</dt><dd className="mt-1 font-semibold text-[#241B3B]">{formatRequestedDate(request.requestedDate)}</dd></div>
+                      <div><dt className="text-[#625B71]">Status</dt><dd className="mt-1 font-semibold text-[#241B3B]">{request.status}</dd></div>
+                      <div><dt className="text-[#625B71]">Session fee</dt><dd className="mt-1 font-semibold text-[#241B3B]">{formatSessionFee(request.hourlyRate)}</dd></div>
+                      <div><dt className="text-[#625B71]">Payment</dt><dd className="mt-1 font-semibold text-[#241B3B]">{paid ? "Paid" : request.paymentStatus || "Unpaid"}</dd></div>
+                    </dl>
+                    {acceptedAndUnpaid && (
+                      <button
+                        type="button"
+                        onClick={() => void payForSession(request.id)}
+                        disabled={payingSessionId === request.id}
+                        style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }}
+                        className="inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {payingSessionId === request.id ? "Preparing payment..." : "Pay for Session"}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       </div>
     </DashboardShell>

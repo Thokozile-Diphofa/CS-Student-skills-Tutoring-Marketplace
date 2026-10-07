@@ -7,6 +7,8 @@ const authRoutes = require("./routes/auth");
 const adminRoutes = require("./routes/admin");
 const tutorRoutes = require("./routes/tutors");
 const tutorApplicationRoutes = require("./routes/tutorApplications");
+const sessionRequestRoutes = require("./routes/sessionRequests");
+const paymentRoutes = require("./routes/payments");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,6 +38,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/tutor-applications", tutorApplicationRoutes);
 app.use("/api/tutors", tutorRoutes);
+app.use("/api/session-requests", sessionRequestRoutes);
+app.use("/api/payments", paymentRoutes);
 
 // Test routes
 app.get("/", (req, res) => {

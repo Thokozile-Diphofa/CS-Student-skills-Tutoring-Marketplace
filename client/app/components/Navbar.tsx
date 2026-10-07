@@ -118,16 +118,16 @@ export default function Navbar() {
   }
 
   return (
-    <header className="border-b border-slate-900 bg-slate-950 text-white">
+    <header className="border-b border-[#6C4CF1]/30 bg-[#241B3B] text-white shadow-md">
       <nav aria-label="Main navigation" className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-5 gap-y-3 px-5 py-4 sm:px-8">
         <Link href="/" className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-lg font-black text-slate-950">E</span>
-          <span className="text-xl font-bold tracking-tight">EasyLearning</span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FFD166] text-lg font-black text-[#241B3B] shadow-sm">E</span>
+          <span className="text-xl font-bold tracking-tight text-white">EasyLearning</span>
         </Link>
 
-        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 text-sm font-medium text-slate-300 sm:gap-x-6">
+        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 text-sm font-medium text-[#EDE7FF] sm:gap-x-6">
           {authStatus !== "loading" && navigation.map((item) => (
-            <Link key={item.label} href={item.href} className="transition hover:text-white">
+            <Link key={item.label} href={item.href} className="transition hover:text-[#FFD166]">
               {item.label}
             </Link>
           ))}
@@ -136,13 +136,13 @@ export default function Navbar() {
               type="button"
               onClick={handleLogout}
               disabled={loggingOut}
-              className="font-semibold text-white transition hover:text-amber-300 disabled:opacity-60"
+              className="rounded-lg bg-[#6C4CF1] px-3 py-1.5 font-semibold text-white transition hover:bg-[#8B5CF6] disabled:opacity-60"
             >
               {loggingOut ? "Logging out..." : "Logout"}
             </button>
           )}
         </div>
-        {logoutError && <p role="alert" className="w-full text-right text-sm text-red-300">{logoutError}</p>}
+        {logoutError && <p role="alert" className="w-full text-right text-sm text-[#EF4444]">{logoutError}</p>}
       </nav>
     </header>
   );

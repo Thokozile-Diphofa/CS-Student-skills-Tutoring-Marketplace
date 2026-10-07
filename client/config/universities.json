@@ -1,0 +1,238 @@
+{
+  "universities": [
+    {
+      "code": "CPUT",
+      "name": "Cape Peninsula University of Technology",
+      "studentEmailDomains": ["mycput.ac.za"],
+      "studentEmailRegex": "^[0-9]+@mycput\\.ac\\.za$",
+      "example": "21212121@mycput.ac.za",
+      "emailVerificationConfigured": true,
+      "verificationSource": "https://www.cput.ac.za/student/quick-links/students-email"
+    },
+    {
+      "code": "CUT",
+      "name": "Central University of Technology",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "DUT",
+      "name": "Durban University of Technology",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "MUT",
+      "name": "Mangosuthu University of Technology",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "NMU",
+      "name": "Nelson Mandela University",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "NWU",
+      "name": "North-West University",
+      "studentEmailDomains": ["mynwu.ac.za"],
+      "studentEmailRegex": "^[0-9]+@mynwu\\.ac\\.za$",
+      "example": "12345678@mynwu.ac.za",
+      "emailVerificationConfigured": true,
+      "verificationSource": "https://services.nwu.ac.za/information-technology/student-email"
+    },
+    {
+      "code": "RU",
+      "name": "Rhodes University",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "SMU",
+      "name": "Sefako Makgatho Health Sciences University",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "SPU",
+      "name": "Sol Plaatje University",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "SU",
+      "name": "Stellenbosch University",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "TUT",
+      "name": "Tshwane University of Technology",
+      "studentEmailDomains": ["tut4life.ac.za"],
+      "studentEmailRegex": "^[0-9]+@tut4life\\.ac\\.za$",
+      "example": "1234567@tut4life.ac.za",
+      "emailVerificationConfigured": true,
+      "verificationSource": "User-provided verified format"
+    },
+    {
+      "code": "UCT",
+      "name": "University of Cape Town",
+      "studentEmailDomains": ["myuct.ac.za"],
+      "studentEmailRegex": "^[0-9]+@myuct\\.ac\\.za$",
+      "example": "12345678@myuct.ac.za",
+      "emailVerificationConfigured": true,
+      "verificationSource": "https://www.icts.uct.ac.za/services-student-computing/email-students"
+    },
+    {
+      "code": "UFH",
+      "name": "University of Fort Hare",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "UJ",
+      "name": "University of Johannesburg",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "UKZN",
+      "name": "University of KwaZulu-Natal",
+      "studentEmailDomains": ["stu.ukzn.ac.za"],
+      "studentEmailRegex": "^[0-9]+@stu\\.ukzn\\.ac\\.za$",
+      "example": "123456789@stu.ukzn.ac.za",
+      "emailVerificationConfigured": true,
+      "verificationSource": "User-provided verified format"
+    },
+    {
+      "code": "UL",
+      "name": "University of Limpopo",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "UMP",
+      "name": "University of Mpumalanga",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "UP",
+      "name": "University of Pretoria",
+      "studentEmailDomains": ["tuks.co.za"],
+      "studentEmailRegex": "^u[0-9]+@tuks\\.co\\.za$",
+      "example": "u12345678@tuks.co.za",
+      "emailVerificationConfigured": true,
+      "verificationSource": "User-provided verified format"
+    },
+    {
+      "code": "UNISA",
+      "name": "University of South Africa",
+      "studentEmailDomains": ["mylife.unisa.ac.za"],
+      "studentEmailRegex": "^[0-9]+@mylife\\.unisa\\.ac\\.za$",
+      "example": "12345678@mylife.unisa.ac.za",
+      "emailVerificationConfigured": true,
+      "verificationSource": "User-provided verified format"
+    },
+    {
+      "code": "UFS",
+      "name": "University of the Free State",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "UWC",
+      "name": "University of the Western Cape",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "Wits",
+      "name": "University of the Witwatersrand",
+      "studentEmailDomains": ["students.wits.ac.za"],
+      "studentEmailRegex": "^[0-9]+@students\\.wits\\.ac\\.za$",
+      "example": "1234567@students.wits.ac.za",
+      "emailVerificationConfigured": true,
+      "verificationSource": "https://www.wits.ac.za/mywits/student-email/"
+    },
+    {
+      "code": "UNIVEN",
+      "name": "University of Venda",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "UNIZULU",
+      "name": "University of Zululand",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "VUT",
+      "name": "Vaal University of Technology",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    },
+    {
+      "code": "WSU",
+      "name": "Walter Sisulu University",
+      "studentEmailDomains": [],
+      "studentEmailRegex": null,
+      "example": null,
+      "emailVerificationConfigured": false,
+      "verificationSource": null
+    }
+  ]
+}

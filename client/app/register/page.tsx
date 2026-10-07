@@ -3,68 +3,49 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import universityConfig from "../../config/universities.json";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const universities = universityConfig.universities;
 
-const universityDomains: Record<string, string[]> = {
-  tut: ["tut4life.ac.za", "tut.ac.za"],
-  tshwane: ["tut4life.ac.za", "tut.ac.za"],
-  wits: ["wits.ac.za"],
-  uct: ["uct.ac.za"],
-  stellenbosch: ["sun.ac.za"],
-  sun: ["sun.ac.za"],
-  up: ["up.ac.za"],
-  pretoria: ["up.ac.za"],
-};
-
-function normalizeText(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+function getSelectedUniversity(code: string) {
+  return universities.find((university) => university.code === code);
 }
 
-function getAllowedDomains(university: string) {
-  const normalized = normalizeText(university);
-
-  if (!normalized) {
-    return [];
-  }
-
-  for (const [key, domains] of Object.entries(universityDomains)) {
-    if (normalized.includes(key)) {
-      return domains;
-    }
-  }
-
-  return [];
-}
-
-function validateUniversityEmail(email: string, university: string) {
+function validateUniversityEmail(email: string, universityCode: string) {
   const trimmedEmail = email.trim();
+  if (!trimmedEmail) return "";
 
-  if (!trimmedEmail) {
-    return "Email is required.";
-  }
-
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailPattern.test(trimmedEmail)) {
+  const emailFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailFormat.test(trimmedEmail)) {
     return "Please enter a valid email address.";
   }
 
-  const domain = trimmedEmail.split("@")[1]?.toLowerCase();
-  if (!domain) {
-    return "Email must include a university domain.";
+  const university = getSelectedUniversity(universityCode);
+  if (!university) {
+    return "Select a supported university before entering your student email.";
   }
 
-  const allowedDomains = getAllowedDomains(university);
-
-  if (allowedDomains.length === 0) {
-    return domain.endsWith(".ac.za")
-      ? ""
-      : "Please use your university email address.";
+  if (!university.emailVerificationConfigured || !university.studentEmailRegex) {
+    return `The official ${university.code} student email format has not been verified yet.`;
   }
 
-  if (!allowedDomains.includes(domain)) {
-    const example = `studentNumber@${allowedDomains[0]}`;
-    return `Use your university email, for example ${example}.`;
+  const emailDomain = trimmedEmail.split("@")[1]?.toLowerCase();
+  if (!university.studentEmailDomains.includes(emailDomain || "")) {
+    const belongsToAnotherUniversity = universities.some((otherUniversity) =>
+      {
+        const otherDomains: string[] = otherUniversity.studentEmailDomains;
+        return otherUniversity.code !== university.code
+          && otherUniversity.emailVerificationConfigured
+          && otherDomains.includes(emailDomain || "");
+      });
+    return belongsToAnotherUniversity
+      ? "This email address does not match the selected university."
+      : `Please use your official ${university.code} student email address.`;
+  }
+
+  if (!new RegExp(university.studentEmailRegex, "i").test(trimmedEmail)) {
+    return "This email address does not match the selected university.";
   }
 
   return "";
@@ -76,7 +57,7 @@ export default function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [university, setUniversity] = useState("");
+  const [universityCode, setUniversityCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -84,18 +65,22 @@ export default function RegisterPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const emailError = useMemo(() => validateUniversityEmail(email, university), [email, university]);
+  const selectedUniversity = getSelectedUniversity(universityCode);
+  const emailError = useMemo(() => validateUniversityEmail(email, universityCode), [email, universityCode]);
   const universityDomainHint = useMemo(() => {
-    const domains = getAllowedDomains(university);
-    return domains.length > 0 ? `Example: studentNumber@${domains[0]}` : "Use a university email ending in .ac.za";
-  }, [university]);
+    if (!selectedUniversity) return "Select a university to see its student email format.";
+    if (!selectedUniversity.emailVerificationConfigured) {
+      return `The official student email format for ${selectedUniversity.code} is not verified yet.`;
+    }
+    return `Use your ${selectedUniversity.code} student email, for example ${selectedUniversity.example}.`;
+  }, [selectedUniversity]);
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
     setSuccessMessage("");
 
-    if (!firstName.trim() || !lastName.trim() || !university.trim() || !email.trim() || !password) {
+    if (!firstName.trim() || !lastName.trim() || !universityCode || !email.trim() || !password) {
       setErrorMessage("Please fill out all required fields.");
       return;
     }
@@ -123,7 +108,7 @@ export default function RegisterPage() {
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          university: university.trim(),
+          university: universityCode,
           email: email.trim(),
           password,
           role: "STUDENT"
@@ -152,54 +137,71 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+    <div className="min-h-screen bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl overflow-hidden rounded-[2rem] border border-[#CFC4F8] bg-white/70 shadow-lg backdrop-blur-sm">
         <div className="grid min-h-[840px] lg:grid-cols-2">
-          <div className="flex items-center justify-center bg-slate-950 px-6 py-12 text-white md:px-10">
+          {/* LEFT SIDE: Vibrant purple gradient */}
+          <div
+            className="flex items-center justify-center px-6 py-12 text-white md:px-10"
+            style={{ background: "linear-gradient(135deg, #6C4CF1 0%, #8B5CF6 100%)" }}
+          >
             <div className="max-w-md">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400 text-lg font-black text-slate-950">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FFD166] text-lg font-black text-[#241B3B] shadow-sm">
                   E
                 </div>
-                <span className="text-2xl font-bold">EasyLearning</span>
+                <span className="text-2xl font-bold tracking-tight text-white">EasyLearning</span>
               </div>
 
-              <h1 className="mt-10 text-4xl font-bold tracking-tight">Create your account</h1>
-              <p className="mt-4 text-base text-slate-300">
+              <h1 className="mt-10 text-4xl font-bold tracking-tight text-white">Create your account</h1>
+              <p className="mt-4 text-base text-[#EDE7FF]">
                 Join a supportive community of students learning, teaching, and growing together.
               </p>
 
-              <div className="mt-10 rounded-2xl border border-slate-700 bg-slate-900/70 p-5">
-                <p className="text-sm text-slate-300">You can join as</p>
+              <div
+                className="mt-10 rounded-2xl border border-white/20 p-5 shadow-sm"
+                style={{ background: "rgba(255, 255, 255, 0.12)" }}
+              >
+                <p className="text-sm font-medium text-[#EDE7FF]">You can join as</p>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl bg-slate-800 p-3">
+                  <div
+                    className="rounded-xl border border-white/20 p-3"
+                    style={{ background: "rgba(255, 255, 255, 0.15)" }}
+                  >
                     <p className="font-semibold text-white">Student</p>
-                    <p className="mt-1 text-xs text-slate-300">Find tutors and book support.</p>
+                    <p className="mt-1 text-xs text-[#EDE7FF]">Find tutors and book support.</p>
                   </div>
-                  <div className="rounded-xl bg-slate-800 p-3">
+                  <div
+                    className="rounded-xl border border-white/20 p-3"
+                    style={{ background: "rgba(255, 255, 255, 0.15)" }}
+                  >
                     <p className="font-semibold text-white">Tutor applicant</p>
-                    <p className="mt-1 text-xs text-slate-300">Apply for tutor access after creating a student account.</p>
+                    <p className="mt-1 text-xs text-[#EDE7FF]">Apply for tutor access after creating a student account.</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-center bg-white px-6 py-10 md:px-10">
+          {/* RIGHT SIDE: Soft peach to lavender gradient */}
+          <div
+            className="flex items-center justify-center px-6 py-10 md:px-10"
+            style={{ background: "linear-gradient(135deg, #FFE8DD 0%, #EDE7FF 100%)" }}
+          >
             <div className="w-full max-w-md">
               <div className="mb-8">
-                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-600">Register</p>
-                <h2 className="mt-2 text-3xl font-bold text-slate-900">Join EasyLearning</h2>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#6C4CF1]">Register</p>
+                <h2 className="mt-2 text-3xl font-bold text-[#241B3B]">Join EasyLearning</h2>
               </div>
 
               {errorMessage && (
-                <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-600">
+                <div className="mb-6 rounded-xl border border-[#EF4444] bg-[#EF4444]/10 p-4 text-sm font-medium text-[#EF4444]">
                   {errorMessage}
                 </div>
               )}
 
               {successMessage && (
-                <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
+                <div className="mb-6 rounded-xl border border-[#22C55E] bg-[#22C55E]/10 p-4 text-sm font-medium text-[#22C55E]">
                   {successMessage}
                 </div>
               )}
@@ -207,7 +209,7 @@ export default function RegisterPage() {
               <form onSubmit={handleRegisterSubmit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="firstName" className="mb-2 block text-sm font-medium text-slate-700">
+                    <label htmlFor="firstName" className="mb-2 block text-sm font-medium text-[#241B3B]">
                       First Name
                     </label>
                     <input
@@ -216,13 +218,14 @@ export default function RegisterPage() {
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       placeholder="First Name"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                      style={{ background: "rgba(255, 255, 255, 0.55)" }}
+                      className="w-full rounded-xl border border-[#CFC4F8] px-4 py-3 text-[#241B3B] placeholder-[#625B71] outline-none transition focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white"
                       disabled={loading}
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="lastName" className="mb-2 block text-sm font-medium text-slate-700">
+                    <label htmlFor="lastName" className="mb-2 block text-sm font-medium text-[#241B3B]">
                       Last Name
                     </label>
                     <input
@@ -231,29 +234,37 @@ export default function RegisterPage() {
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
                       placeholder="Last Name"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                      style={{ background: "rgba(255, 255, 255, 0.55)" }}
+                      className="w-full rounded-xl border border-[#CFC4F8] px-4 py-3 text-[#241B3B] placeholder-[#625B71] outline-none transition focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white"
                       disabled={loading}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="university" className="mb-2 block text-sm font-medium text-slate-700">
+                  <label htmlFor="university" className="mb-2 block text-sm font-medium text-[#241B3B]">
                     University
                   </label>
-                  <input
+                  <select
                     id="university"
-                    type="text"
-                    value={university}
-                    onChange={(event) => setUniversity(event.target.value)}
-                    placeholder="TUT, UCT, Wits, UP..."
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                    value={universityCode}
+                    onChange={(event) => setUniversityCode(event.target.value)}
+                    style={{ background: "rgba(255, 255, 255, 0.55)" }}
+                    className="w-full rounded-xl border border-[#CFC4F8] px-4 py-3 text-[#241B3B] outline-none transition focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white"
                     disabled={loading}
-                  />
+                    required
+                  >
+                    <option value="" disabled>Select your university</option>
+                    {universities.map((university) => (
+                      <option key={university.code} value={university.code}>
+                        {university.name} ({university.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
-                  <label htmlFor="email" className="mb-2 block text-sm font-medium text-slate-700">
+                  <label htmlFor="email" className="mb-2 block text-sm font-medium text-[#241B3B]">
                     Email
                   </label>
                   <input
@@ -261,18 +272,19 @@ export default function RegisterPage() {
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="studentNumber@tut4life.ac.za"
-                    className={`w-full rounded-xl border px-4 py-3 text-slate-900 outline-none transition focus:bg-white ${
-                      emailError ? "border-red-300 bg-red-50 focus:border-red-400" : "border-slate-200 bg-slate-50 focus:border-amber-400"
+                    placeholder={selectedUniversity?.example || "Select a university first"}
+                    style={{ background: "rgba(255, 255, 255, 0.55)" }}
+                    className={`w-full rounded-xl border px-4 py-3 text-[#241B3B] placeholder-[#625B71] outline-none transition focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white ${
+                      emailError ? "border-[#EF4444] bg-[#EF4444]/10 focus:border-[#EF4444]" : "border-[#CFC4F8] focus:border-[#6C4CF1]"
                     }`}
                     disabled={loading}
                   />
-                  <p className="mt-2 text-xs text-slate-500">{universityDomainHint}</p>
-                  {emailError ? <p className="mt-2 text-xs text-red-600">{emailError}</p> : null}
+                  <p className="mt-2 text-xs text-[#625B71]">{universityDomainHint}</p>
+                  {emailError ? <p className="mt-2 text-xs font-medium text-[#EF4444]">{emailError}</p> : null}
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-700">
+                  <label htmlFor="password" className="mb-2 block text-sm font-medium text-[#241B3B]">
                     Password
                   </label>
                   <div className="relative">
@@ -282,13 +294,14 @@ export default function RegisterPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Create a password"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-11 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                      style={{ background: "rgba(255, 255, 255, 0.55)" }}
+                      className="w-full rounded-xl border border-[#CFC4F8] px-4 py-3 pr-11 text-[#241B3B] placeholder-[#625B71] outline-none transition focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white"
                       disabled={loading}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
-                      className="absolute inset-y-0 right-3 flex items-center text-sm font-medium text-slate-500 hover:text-slate-700"
+                      className="absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#625B71] hover:text-[#241B3B]"
                     >
                       {showPassword ? "Hide" : "Show"}
                     </button>
@@ -296,7 +309,7 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="confirmPassword" className="mb-2 block text-sm font-medium text-slate-700">
+                  <label htmlFor="confirmPassword" className="mb-2 block text-sm font-medium text-[#241B3B]">
                     Confirm Password
                   </label>
                   <div className="relative">
@@ -306,13 +319,14 @@ export default function RegisterPage() {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm your password"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-11 text-slate-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                      style={{ background: "rgba(255, 255, 255, 0.55)" }}
+                      className="w-full rounded-xl border border-[#CFC4F8] px-4 py-3 pr-11 text-[#241B3B] placeholder-[#625B71] outline-none transition focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30 focus:bg-white"
                       disabled={loading}
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword((value) => !value)}
-                      className="absolute inset-y-0 right-3 flex items-center text-sm font-medium text-slate-500 hover:text-slate-700"
+                      className="absolute inset-y-0 right-3 flex items-center text-sm font-medium text-[#625B71] hover:text-[#241B3B]"
                     >
                       {showConfirmPassword ? "Hide" : "Show"}
                     </button>
@@ -320,8 +334,8 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium text-slate-700">Student account</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                  <p className="text-sm font-medium text-[#241B3B]">Student account</p>
+                  <p className="mt-1 text-xs leading-5 text-[#625B71]">
                     Every account starts as a student. Apply separately to tutor after creating your account.
                   </p>
                 </div>
@@ -329,15 +343,18 @@ export default function RegisterPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-xl bg-amber-400 px-4 py-3 font-semibold text-slate-900 transition hover:bg-amber-300 disabled:opacity-50"
+                  style={{
+                    background: loading ? "#8B5CF6" : "linear-gradient(90deg, #6C4CF1, #8B5CF6)",
+                  }}
+                  className="w-full rounded-xl px-4 py-3 font-semibold text-white shadow-md transition hover:opacity-95 disabled:opacity-50"
                 >
                   {loading ? "Creating Account..." : "Create Account"}
                 </button>
               </form>
 
-              <p className="mt-6 text-center text-sm text-slate-600">
+              <p className="mt-6 text-center text-sm text-[#625B71]">
                 Already have an account?{" "}
-                <Link href="/login" className="font-semibold text-amber-600 hover:text-amber-500">
+                <Link href="/login" className="font-semibold text-[#6C4CF1] hover:text-[#8B5CF6]">
                   Login
                 </Link>
               </p>

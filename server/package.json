@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "admin:bootstrap": "node scripts/bootstrapAdmin.js"
   },
   "keywords": [],
   "author": "",

@@ -5,6 +5,39 @@ const { ensureTutorApplicationSchema } = require("../services/tutorApplications"
 
 const router = express.Router();
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_APPLICATION_SUBJECTS = 20;
+
+function normalizeSubjects(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return { subjects: null, error: "Add at least one module you can tutor." };
+  }
+  if (value.length > MAX_APPLICATION_SUBJECTS) {
+    return { subjects: null, error: `You can add up to ${MAX_APPLICATION_SUBJECTS} modules.` };
+  }
+
+  const subjects = [];
+  const seen = new Set();
+  for (const subject of value) {
+    if (typeof subject !== "string") {
+      return { subjects: null, error: "Each module name must be text." };
+    }
+    const normalizedSubject = subject.trim();
+    if (!normalizedSubject) {
+      return { subjects: null, error: "Module names cannot be blank." };
+    }
+    if (normalizedSubject.length > 100) {
+      return { subjects: null, error: "Module names must be 100 characters or fewer." };
+    }
+
+    const duplicateKey = normalizedSubject.toLowerCase();
+    if (!seen.has(duplicateKey)) {
+      seen.add(duplicateKey);
+      subjects.push(normalizedSubject);
+    }
+  }
+
+  return { subjects, error: "" };
+}
 
 function serializeApplication(row) {
   return {
@@ -26,7 +59,7 @@ function serializeApplication(row) {
   };
 }
 
-function validateApplication(body, availableSubjects, email) {
+function validateApplication(body, email) {
   if (!emailPattern.test(email || "")) return "A valid student email is required.";
 
   const programme = typeof body.programme === "string" ? body.programme.trim() : "";
@@ -44,16 +77,6 @@ function validateApplication(body, availableSubjects, email) {
   if (experience.length > 3000) return "Experience must be no more than 3000 characters.";
   if (studentNumber.length > 80) return "Student number must be no more than 80 characters.";
   if (!Number.isFinite(rate) || rate <= 0 || rate > 100000) return "Hourly rate must be a valid amount greater than zero.";
-  if (!Array.isArray(body.subjects) || body.subjects.length === 0) return "Select at least one subject.";
-
-  const subjectNames = body.subjects.map((subject) => typeof subject === "string" ? subject.trim() : "");
-  if (subjectNames.some((subject) => !subject)) return "Each selected subject must be valid.";
-
-  const canonicalSubjects = new Map(availableSubjects.map((subject) => [subject.toLowerCase(), subject]));
-  if (subjectNames.some((subject) => !canonicalSubjects.has(subject.toLowerCase()))) {
-    return "One or more selected subjects are not available.";
-  }
-
   return "";
 }
 
@@ -112,18 +135,12 @@ router.post("/", authenticateToken, async (req, res) => {
     const userResult = await db.query("SELECT email FROM users WHERE id = $1", [req.user.id]);
     if (userResult.rows.length === 0) return res.status(404).json({ error: "Account not found." });
 
-    const subjectResult = await db.query(`
-      SELECT DISTINCT skill_name
-      FROM tutor_skills
-      WHERE BTRIM(skill_name) <> ''
-    `);
-    const availableSubjects = subjectResult.rows.map((row) => row.skill_name);
-    const validationError = validateApplication(body, availableSubjects, userResult.rows[0].email);
+    const validationError = validateApplication(body, userResult.rows[0].email);
     if (validationError) return res.status(400).json({ error: validationError });
 
-    const subjects = [...new Set(body.subjects.map((subject) => subject.trim()))];
-    const canonicalSubjects = new Map(availableSubjects.map((subject) => [subject.toLowerCase(), subject]));
-    const normalizedSubjects = subjects.map((subject) => canonicalSubjects.get(subject.toLowerCase()));
+    const subjectValidation = normalizeSubjects(body.subjects);
+    if (subjectValidation.error) return res.status(400).json({ error: subjectValidation.error });
+    const normalizedSubjects = subjectValidation.subjects;
     const rate = Number(body.proposedHourlyRate);
     const yearOfStudy = Number(body.yearOfStudy);
 
