@@ -96,8 +96,13 @@ export default function AdminLoginPage() {
       if (data.user.email) localStorage.setItem("user_email", data.user.email);
       localStorage.setItem("user_name", `${data.user.firstName || ""} ${data.user.lastName || ""}`.trim());
       router.replace("/dashboard/admin");
-    } catch {
-      setErrorMessage(`Unable to connect to backend server at ${API_BASE_URL}. Please try again.`);
+    }  catch (error) {
+  console.error("Admin login error:", error);
+  setErrorMessage(
+    error instanceof Error
+      ? error.message
+      : `Unable to connect to backend server at ${API_BASE_URL}. Please try again.`
+  );
     } finally {
       setLoading(false);
     }
