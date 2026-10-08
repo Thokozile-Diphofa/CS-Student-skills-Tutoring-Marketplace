@@ -11,6 +11,7 @@ type VerificationState = "CHECKING" | "PAID" | "FAILED" | "TIMEOUT" | "ERROR";
 export default function PaymentReturnPage() {
   const [state, setState] = useState<VerificationState>("CHECKING");
   const [refreshCount, setRefreshCount] = useState(0);
+  const [receiptHref, setReceiptHref] = useState("");
 
   useEffect(() => {
     const sessionRequestId = Number(new URLSearchParams(window.location.search).get("sessionRequestId"));
@@ -33,6 +34,7 @@ export default function PaymentReturnPage() {
         if (cancelled) return;
 
         if (data.paymentStatus === "PAID") {
+          setReceiptHref(`/payments/receipt?sessionRequestId=${sessionRequestId}`);
           setState("PAID");
           return;
         }
@@ -85,6 +87,11 @@ export default function PaymentReturnPage() {
               Check payment status
             </button>
           ) : null}
+          {state === "PAID" && receiptHref && (
+            <Link href={receiptHref} className="mt-6 inline-flex rounded-lg bg-[#6C4CF1] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5B3FD2]">
+              View / Print Receipt
+            </Link>
+          )}
           <Link href="/dashboard/student#requests" className="mt-6 block text-sm font-semibold text-[#6C4CF1] hover:underline">
             Return to My Session Requests
           </Link>

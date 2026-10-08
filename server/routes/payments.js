@@ -3,6 +3,8 @@ const express = require("express");
 const db = require("../db");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const payfast = require("../services/payfast");
+const paymentReceipts = require("../services/paymentReceipts");
+const receiptEmail = require("../services/receiptEmail");
 
 const router = express.Router();
 
@@ -33,8 +35,38 @@ function getPaymentConfig() {
   };
 }
 
-function buildCheckoutFields(session, payment, config) {
-  const clientUrl = (process.env.CLIENT_URL || "http://localhost:3000").replace(/\/$/, "");
+function getClientBaseUrl() {
+  const configuredClientUrl = process.env.CLIENT_URL?.trim();
+  if (!configuredClientUrl && process.env.NODE_ENV === "production") {
+    const error = new Error("CLIENT_URL is required for production payment links.");
+    error.code = "CLIENT_URL_MISSING";
+    throw error;
+  }
+
+  let clientUrl;
+  try {
+    clientUrl = new URL(configuredClientUrl || "http://localhost:3000");
+  } catch {
+    const error = new Error("CLIENT_URL is invalid.");
+    error.code = "CLIENT_URL_INVALID";
+    throw error;
+  }
+
+  if (process.env.NODE_ENV === "production"
+    && (clientUrl.protocol !== "https:" || ["localhost", "127.0.0.1", "::1"].includes(clientUrl.hostname))) {
+    const error = new Error("CLIENT_URL must be a public HTTPS origin in production.");
+    error.code = "CLIENT_URL_INVALID";
+    throw error;
+  }
+
+  return clientUrl.origin;
+}
+
+function getReceiptUrl(sessionRequestId) {
+  return new URL(`/payments/receipt?sessionRequestId=${encodeURIComponent(sessionRequestId)}`, getClientBaseUrl()).toString();
+}
+
+function buildCheckoutFields(session, payment, config, clientUrl) {
   const fields = {
     merchant_id: config.merchantId,
     merchant_key: config.merchantKey,
@@ -64,6 +96,13 @@ router.post("/initialize", authenticateToken, requireRole("STUDENT"), async (req
 
   const config = getPaymentConfig();
   if (!config) return res.status(503).json({ error: "PayFast Sandbox is not configured." });
+
+  let clientUrl;
+  try {
+    clientUrl = getClientBaseUrl();
+  } catch {
+    return res.status(503).json({ error: "Payment return URLs are not configured." });
+  }
 
   let client;
   try {
@@ -156,7 +195,7 @@ router.post("/initialize", authenticateToken, requireRole("STUDENT"), async (req
     }
 
     await client.query("COMMIT");
-    return res.json({ paymentUrl: config.paymentUrl, fields: buildCheckoutFields(session, payment, config) });
+    return res.json({ paymentUrl: config.paymentUrl, fields: buildCheckoutFields(session, payment, config, clientUrl) });
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("Payment initialization failed:", error.code || "database/provider error");
@@ -202,6 +241,22 @@ router.get("/session/:sessionRequestId", authenticateToken, requireRole("STUDENT
   }
 });
 
+router.get("/receipt/:sessionRequestId", authenticateToken, requireRole("STUDENT"), async (req, res) => {
+  const sessionRequestId = Number(req.params.sessionRequestId);
+  if (!Number.isInteger(sessionRequestId) || sessionRequestId < 1) {
+    return res.status(400).json({ error: "Invalid session request ID." });
+  }
+
+  try {
+    const receipt = await paymentReceipts.getStudentReceiptBySessionRequestId(sessionRequestId, req.user.id);
+    if (!receipt) return res.status(404).json({ error: "Paid receipt not found." });
+    return res.json({ receipt });
+  } catch (error) {
+    console.error("Fetch payment receipt failed:", error.code || "database error");
+    return res.status(500).json({ error: "Unable to load payment receipt." });
+  }
+});
+
 router.post("/payfast/notify", express.urlencoded({ extended: false, limit: "32kb" }), async (req, res) => {
   const config = getPaymentConfig();
   if (!config) return res.status(503).send("Sandbox configuration unavailable");
@@ -210,21 +265,24 @@ router.post("/payfast/notify", express.urlencoded({ extended: false, limit: "32k
   if (Array.isArray(notification.signature) || !payfast.verifyPayfastSignature(notification, config.passphrase)) {
     return res.status(400).send("Invalid notification signature");
   }
-  if (!payfast.isPayfastIp(req.socket.remoteAddress)) return res.status(403).send("Untrusted notification source");
+  if (!payfast.isPayfastIp(req.ip)) return res.status(403).send("Untrusted notification source");
   if (notification.merchant_id !== config.merchantId || !notification.m_payment_id
     || !notification.pf_payment_id || !["COMPLETE", "CANCELLED"].includes(notification.payment_status)) {
     return res.status(400).send("Invalid notification details");
   }
 
   let client;
+  let receiptEmailPaymentId = null;
   try {
     client = await db.pool.connect();
     await client.query("BEGIN");
     const paymentResult = await client.query(`
-      SELECT id, amount::text AS amount, payment_status, payout_status
-      FROM payments
-      WHERE provider = 'PAYFAST' AND provider_reference = $1
-      FOR UPDATE
+            SELECT p.id, p.session_request_id, p.amount::text AS amount,
+              p.payment_status, p.payout_status, sr.status AS session_status
+            FROM payments p
+            INNER JOIN session_requests sr ON sr.id = p.session_request_id
+            WHERE p.provider = 'PAYFAST' AND p.provider_reference = $1
+            FOR UPDATE OF p, sr
     `, [notification.m_payment_id]);
     const payment = paymentResult.rows[0];
     const expectedAmount = payfast.formatZarAmount(payment?.amount);
@@ -254,6 +312,10 @@ router.post("/payfast/notify", express.urlencoded({ extended: false, limit: "32k
       await client.query("ROLLBACK");
       return res.status(409).send("Payment is not eligible for this notification");
     }
+    if (notification.payment_status === "COMPLETE" && payment.session_status !== "ACCEPTED") {
+      await client.query("ROLLBACK");
+      return res.status(409).send("Session is not accepted for payment");
+    }
 
     if (notification.payment_status === "COMPLETE") {
       await client.query(`
@@ -261,6 +323,7 @@ router.post("/payfast/notify", express.urlencoded({ extended: false, limit: "32k
         SET payment_status = 'PAID', paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE id = $1 AND payment_status = 'PENDING' AND payout_status = 'NOT_ELIGIBLE'
       `, [payment.id]);
+      receiptEmailPaymentId = payment.id;
     } else {
       await client.query(`
         UPDATE payments
@@ -269,6 +332,18 @@ router.post("/payfast/notify", express.urlencoded({ extended: false, limit: "32k
       `, [payment.id]);
     }
     await client.query("COMMIT");
+
+    if (receiptEmailPaymentId !== null) {
+      try {
+        const receipt = await paymentReceipts.getReceiptByPaymentId(receiptEmailPaymentId);
+        if (!receipt) throw new Error("Verified payment receipt could not be loaded.");
+        receipt.receiptUrl = getReceiptUrl(receipt.sessionRequestId);
+        await receiptEmail.sendPaymentReceiptEmail(receipt);
+      } catch (error) {
+        console.error("Payment receipt email failed:", error.code || error.name || "email error");
+      }
+    }
+
     return res.status(200).send("Notification verified");
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});

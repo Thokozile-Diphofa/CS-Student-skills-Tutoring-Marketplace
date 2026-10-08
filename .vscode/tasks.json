@@ -62,6 +62,46 @@
 			],
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Temporary install receipt mailer",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"install",
+				"nodemailer",
+				"--prefix",
+				"server"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Temporary verified receipt focused tests",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"--prefix",
+				"server",
+				"test",
+				"--",
+				"test/payments.test.js"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Temporary receipt frontend production build",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"--prefix",
+				"client",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }

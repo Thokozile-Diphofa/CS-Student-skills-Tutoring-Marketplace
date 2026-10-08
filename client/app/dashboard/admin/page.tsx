@@ -49,6 +49,26 @@ interface ApprovedTutor {
   subjects: string[];
 }
 
+interface PaymentRecord {
+  id: number;
+  amount: number | null;
+  currency: string | null;
+  paymentStatus: string | null;
+  payoutStatus: string | null;
+  provider: string | null;
+  reference: string | null;
+  providerReference: string | null;
+  createdAt: string | null;
+  paidAt: string | null;
+  receiptNumber: string | null;
+  sessionRequestId: number | null;
+  subject: string | null;
+  requestedDate: string | null;
+  sessionStatus: string | null;
+  studentName: string | null;
+  tutorName: string | null;
+}
+
 interface AdminDashboardData {
   overview: {
     totalUsers: number;
@@ -58,6 +78,7 @@ interface AdminDashboardData {
   };
   users: AdminUser[];
   approvedTutors: ApprovedTutor[];
+  payments: PaymentRecord[];
 }
 
 interface AdminSessionUser {
@@ -88,7 +109,14 @@ async function fetchDashboardData(): Promise<{ dashboard: AdminDashboardData; ap
     dashboardResponse.json() as Promise<AdminDashboardData>,
     applicationsResponse.json() as Promise<{ applications: TutorApplication[] }>
   ]);
-  return { dashboard, applications: applicationData.applications || [] };
+
+  return {
+    dashboard: {
+      ...dashboard,
+      payments: Array.isArray(dashboard.payments) ? dashboard.payments : []
+    },
+    applications: applicationData.applications || []
+  };
 }
 
 function formatDate(value: string | null) {
@@ -99,6 +127,21 @@ function formatDate(value: string | null) {
 
 function formatRate(value: number | null) {
   return value === null ? "Not set" : new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(value);
+}
+
+function formatAmount(value: number | null, currency: string | null = "ZAR") {
+  if (value === null || Number.isNaN(value)) return "Not set";
+  return new Intl.NumberFormat("en-ZA", {
+    style: "currency",
+    currency: currency || "ZAR"
+  }).format(value);
+}
+
+function paymentStatusClass(status: string | null) {
+  if (status === "PAID") return "border-[#22C55E]/40 bg-[#22C55E]/10 text-[#22C55E]";
+  if (status === "PENDING") return "border-[#FF8A4C]/40 bg-[#FF8A4C]/10 text-[#FF8A4C]";
+  if (status === "FAILED" || status === "DECLINED") return "border-[#EF4444]/40 bg-[#EF4444]/10 text-[#EF4444]";
+  return "border-[#625B71]/20 bg-[#F3EEFF] text-[#625B71]";
 }
 
 function statusClass(status: ApplicationStatus) {
@@ -409,6 +452,62 @@ export default function AdminDashboardPage() {
                   {notice && <p className="mt-4 text-sm font-semibold text-[#22C55E]" role="status">{notice}</p>}
                 </div>
               )}
+            </section>
+
+            <section aria-labelledby="payments-heading" className="border-t border-[#CFC4F8] py-7">
+              <h2 id="payments-heading" className="text-xl font-bold text-[#241B3B]">Payments</h2>
+              <div className="mt-4 divide-y divide-[#CFC4F8] border-y border-[#CFC4F8] sm:hidden">
+                {dashboard.payments.length === 0 && <p className="px-4 py-8 text-center text-sm text-[#625B71]">No payment records yet.</p>}
+                {dashboard.payments.map((payment) => (
+                  <article key={payment.id} className="space-y-2 px-3 py-4 bg-white/80">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-[#241B3B]">{payment.studentName} → {payment.tutorName}</p>
+                        <p className="text-xs text-[#625B71]">{payment.subject || "Session"} · {payment.receiptNumber || `Payment #${payment.id}`}</p>
+                      </div>
+                      <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${paymentStatusClass(payment.paymentStatus)}`}>{payment.paymentStatus || "UNKNOWN"}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[#241B3B]">
+                      <span>{formatAmount(payment.amount, payment.currency)}</span>
+                      <span className="text-[#625B71]">{payment.provider || "Provider"}</span>
+                    </div>
+                    <div className="text-xs text-[#625B71]">
+                      <p>Reference: {payment.reference || "Not available"}</p>
+                      <p>Session status: {payment.sessionStatus || "Unknown"}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div className="mt-4 hidden overflow-x-auto rounded-xl border border-[#CFC4F8] bg-white/80 shadow-sm backdrop-blur-sm sm:block">
+                <table className="w-full min-w-[940px] text-left text-sm">
+                  <thead className="bg-[#EDE7FF]/60 text-xs uppercase text-[#625B71]">
+                    <tr>
+                      <th scope="col" className="px-4 py-3">Student</th>
+                      <th scope="col" className="px-4 py-3">Tutor</th>
+                      <th scope="col" className="px-4 py-3">Session</th>
+                      <th scope="col" className="px-4 py-3">Amount</th>
+                      <th scope="col" className="px-4 py-3">Status</th>
+                      <th scope="col" className="px-4 py-3">Reference</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#CFC4F8]">
+                    {dashboard.payments.map((payment) => (
+                      <tr key={payment.id}>
+                        <td className="px-4 py-3 font-semibold text-[#241B3B]">{payment.studentName || "Unknown"}</td>
+                        <td className="px-4 py-3 text-[#241B3B]">{payment.tutorName || "Unknown"}</td>
+                        <td className="px-4 py-3 text-[#241B3B]">
+                          <p>{payment.subject || "Session"}</p>
+                          <p className="mt-1 text-xs text-[#625B71]">{payment.sessionStatus || "Unknown"}</p>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-[#241B3B]">{formatAmount(payment.amount, payment.currency)}</td>
+                        <td className="px-4 py-3"><span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${paymentStatusClass(payment.paymentStatus)}`}>{payment.paymentStatus || "UNKNOWN"}</span></td>
+                        <td className="px-4 py-3 text-[#625B71]">{payment.reference || "Not available"}</td>
+                      </tr>
+                    ))}
+                    {dashboard.payments.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-[#625B71]">No payment records yet.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             <section aria-labelledby="users-heading" className="border-t border-[#CFC4F8] py-7">
