@@ -443,16 +443,32 @@ export default function StudentDashboardPage() {
                       <div><dt className="text-[#625B71]">Session fee</dt><dd className="mt-1 font-semibold text-[#241B3B]">{formatSessionFee(request.hourlyRate)}</dd></div>
                       <div><dt className="text-[#625B71]">Payment</dt><dd className="mt-1 font-semibold text-[#241B3B]">{paid ? "Paid" : request.paymentStatus || "Unpaid"}</dd></div>
                     </dl>
-                    {acceptedAndUnpaid && (
-                      <button
-                        type="button"
-                        onClick={() => void payForSession(request.id)}
-                        disabled={payingSessionId === request.id}
-                        style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }}
-                        className="inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {payingSessionId === request.id ? "Preparing payment..." : "Pay for Session"}
-                      </button>
+                    {request.status === "DECLINED" ? (
+                      <p className="text-sm font-semibold text-[#B91C1C] md:col-span-2" role="status">
+                        Payment unavailable because the tutor declined this session.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-3 md:justify-end">
+                        {acceptedAndUnpaid && (
+                          <button
+                            type="button"
+                            onClick={() => void payForSession(request.id)}
+                            disabled={payingSessionId === request.id}
+                            style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }}
+                            className="inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {payingSessionId === request.id ? "Preparing payment..." : "Pay for Session"}
+                          </button>
+                        )}
+                        {paid && (
+                          <Link
+                            href={`/payments/receipt?sessionRequestId=${request.id}`}
+                            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#6C4CF1] px-4 py-2 text-sm font-semibold text-[#6C4CF1] transition hover:bg-[#6C4CF1]/5"
+                          >
+                            View Receipt
+                          </Link>
+                        )}
+                      </div>
                     )}
                   </li>
                 );

@@ -6,12 +6,14 @@ const jwt = require("jsonwebtoken");
 const db = require("../db");
 const tutorApplicationService = require("../services/tutorApplications");
 const payfast = require("../services/payfast");
+const receiptEmail = require("../services/receiptEmail");
 
 const originalQuery = db.query;
 const originalPool = db.pool;
 const originalGetEffectiveRoles = tutorApplicationService.getEffectiveRoles;
 const originalFetch = global.fetch;
 const originalIsPayfastIp = payfast.isPayfastIp;
+const originalSendPaymentReceiptEmail = receiptEmail.sendPaymentReceiptEmail;
 const originalEnvironment = Object.fromEntries([
   "PAYFAST_URL",
   "PAYFAST_MERCHANT_ID",
@@ -22,21 +24,26 @@ const originalEnvironment = Object.fromEntries([
 ].map((name) => [name, process.env[name]]));
 const activeHarnesses = [];
 
-async function createHarness({ sessionStatus = "ACCEPTED", studentId = 7, tutorId = 31, roles = ["STUDENT"] } = {}) {
+async function createHarness({ sessionStatus = "ACCEPTED", studentId = 7, tutorId = 31, roles = ["STUDENT"], failReceiptEmail = false } = {}) {
   const state = {
+    transactionOpen: false,
     session: {
       id: 10,
       student_id: studentId,
       tutor_id: tutorId,
       status: sessionStatus,
+      subject: "Mathematics",
+      requested_date: "2026-10-09T10:00:00.000Z",
       hourly_rate: "150.00",
       student_first_name: "Student",
       student_last_name: "Example",
-      student_email: "student@university.test"
+      student_email: "student@university.test",
+      tutor_first_name: "Tutor",
+      tutor_last_name: "Example"
     },
     payment: null
   };
-  const counters = { serverValidation: 0 };
+  const counters = { serverValidation: 0, emailAttempts: 0, emailedReceipt: null, payfastAddress: null };
 
   db.query = async (text, params = []) => {
     const query = text.replace(/\s+/g, " ").trim().toLowerCase();
@@ -53,12 +60,53 @@ async function createHarness({ sessionStatus = "ACCEPTED", studentId = 7, tutorI
         paid_at: state.payment?.paid_at || null
       }] };
     }
+    if (query.startsWith("select p.id as payment_id") && query.includes("and p.id = $1")) {
+      if (Number(params[0]) !== state.payment?.id || state.payment?.payment_status !== "PAID") return { rows: [] };
+      return { rows: [{
+        payment_id: state.payment.id,
+        session_request_id: state.session.id,
+        amount: state.payment.amount,
+        currency: state.payment.currency,
+        paid_at: state.payment.paid_at,
+        provider_reference: state.payment.provider_reference,
+        subject: state.session.subject,
+        session_date: state.session.requested_date,
+        student_first_name: state.session.student_first_name,
+        student_last_name: state.session.student_last_name,
+        student_email: state.session.student_email,
+        tutor_first_name: state.session.tutor_first_name,
+        tutor_last_name: state.session.tutor_last_name
+      }] };
+    }
+    if (query.startsWith("select p.id as payment_id")) {
+      const [sessionRequestId, ownerId] = params;
+      if (Number(sessionRequestId) !== state.session.id || Number(ownerId) !== state.session.student_id
+        || state.payment?.payment_status !== "PAID") return { rows: [] };
+      return { rows: [{
+
+        payment_id: state.payment.id,
+        session_request_id: state.session.id,
+        amount: state.payment.amount,
+        currency: state.payment.currency,
+        paid_at: state.payment.paid_at,
+        provider_reference: state.payment.provider_reference,
+        subject: state.session.subject,
+        session_date: state.session.requested_date,
+        student_first_name: state.session.student_first_name,
+        student_last_name: state.session.student_last_name,
+        student_email: state.session.student_email,
+        tutor_first_name: state.session.tutor_first_name,
+        tutor_last_name: state.session.tutor_last_name
+      }] };
+    }
     throw new Error(`Unexpected fake database query: ${query}`);
   };
 
   const client = {
     async query(text, params = []) {
       const query = text.replace(/\s+/g, " ").trim().toLowerCase();
+      if (query === "begin") state.transactionOpen = true;
+      if (query === "commit" || query === "rollback") state.transactionOpen = false;
       if (["begin", "commit", "rollback"].includes(query)) return { rows: [] };
       if (query.includes("from session_requests sr") && query.includes("for update of sr")) {
         return Number(params[0]) === state.session.id ? { rows: [{ ...state.session }] } : { rows: [] };
@@ -100,9 +148,9 @@ async function createHarness({ sessionStatus = "ACCEPTED", studentId = 7, tutorI
         };
         return { rows: [{ ...state.payment }] };
       }
-      if (query.startsWith("select id, amount::text as amount, payment_status, payout_status from payments")) {
+      if (query.startsWith("select p.id, p.session_request_id, p.amount::text as amount")) {
         return state.payment?.provider_reference === params[0] && state.payment.provider === "PAYFAST"
-          ? { rows: [{ ...state.payment }] }
+          ? { rows: [{ ...state.payment, session_status: state.session.status }] }
           : { rows: [] };
       }
       if (query.startsWith("update payments set payment_status = 'paid'")) {
@@ -125,7 +173,16 @@ async function createHarness({ sessionStatus = "ACCEPTED", studentId = 7, tutorI
 
   db.pool = { connect: async () => client };
   tutorApplicationService.getEffectiveRoles = async (userId) => Number(userId) === 2 ? ["ADMIN"] : roles;
-  payfast.isPayfastIp = () => true;
+  payfast.isPayfastIp = (address) => {
+    counters.payfastAddress = address;
+    return true;
+  };
+  receiptEmail.sendPaymentReceiptEmail = async (receipt) => {
+    assert.equal(state.transactionOpen, false);
+    counters.emailAttempts += 1;
+    if (failReceiptEmail) throw Object.assign(new Error("SMTP send failed"), { code: "SMTP_TEST_FAILURE" });
+    counters.emailedReceipt = receipt;
+  };
   process.env.PAYFAST_URL = "https://sandbox.payfast.co.za/eng/process";
   process.env.PAYFAST_MERCHANT_ID = "10000100";
   process.env.PAYFAST_MERCHANT_KEY = "sandbox-only-test-key";
@@ -144,6 +201,7 @@ async function createHarness({ sessionStatus = "ACCEPTED", studentId = 7, tutorI
   delete require.cache[require.resolve("../middleware/auth")];
   delete require.cache[require.resolve("../routes/payments")];
   const app = express();
+  app.set("trust proxy", 1);
   app.use(express.json());
   app.use(cookieParser());
   app.use("/api/payments", require("../routes/payments"));
@@ -173,6 +231,12 @@ async function initialize(harness, body = { sessionRequestId: 10 }, userId = 7) 
   return { response, data: await response.json() };
 }
 
+async function getReceipt(harness, userId = 7, authenticated = true) {
+  const headers = authenticated ? { Authorization: `Bearer ${tokenFor(userId)}` } : {};
+  const response = await fetch(`${harness.url}/api/payments/receipt/10`, { headers });
+  return { response, data: await response.json() };
+}
+
 function makeItn(payment, overrides = {}) {
   const fields = {
     m_payment_id: payment.provider_reference,
@@ -190,7 +254,10 @@ function makeItn(payment, overrides = {}) {
 async function sendItn(harness, fields) {
   const response = await fetch(`${harness.url}/api/payments/payfast/notify`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "X-Forwarded-For": "197.97.145.144"
+    },
     body: new URLSearchParams(fields).toString()
   });
   return response;
@@ -204,6 +271,7 @@ afterEach(async () => {
   db.pool = originalPool;
   tutorApplicationService.getEffectiveRoles = originalGetEffectiveRoles;
   payfast.isPayfastIp = originalIsPayfastIp;
+  receiptEmail.sendPaymentReceiptEmail = originalSendPaymentReceiptEmail;
   global.fetch = originalFetch;
   for (const [name, value] of Object.entries(originalEnvironment)) {
     if (value === undefined) delete process.env[name];
@@ -238,6 +306,15 @@ test("initialization rejects unaccepted sessions, other students, and wrong role
   assert.equal(pending.response.status, 409);
   assert.equal(pendingHarness.state.payment, null);
 
+  for (const status of ["DECLINED", "CANCELLED", "COMPLETED"]) {
+    const harness = await createHarness({ sessionStatus: status });
+    const result = await initialize(harness);
+    assert.equal(result.response.status, 409);
+    assert.equal(result.data.error, "Only accepted sessions can be paid.");
+    assert.equal(result.data.paymentUrl, undefined);
+    assert.equal(harness.state.payment, null);
+  }
+
   const ownedHarness = await createHarness({ studentId: 8 });
   const otherStudent = await initialize(ownedHarness, { sessionRequestId: 10 }, 7);
   assert.equal(otherStudent.response.status, 404);
@@ -246,6 +323,21 @@ test("initialization rejects unaccepted sessions, other students, and wrong role
   const tutorHarness = await createHarness({ roles: ["TUTOR"] });
   const denied = await initialize(tutorHarness);
   assert.equal(denied.response.status, 403);
+});
+
+test("changing an accepted session to declined blocks direct checkout and preserves payment history", async () => {
+  const harness = await createHarness();
+  const initialized = await initialize(harness);
+  assert.equal(initialized.response.status, 200);
+  const existingPayment = { ...harness.state.payment };
+
+  harness.state.session.status = "DECLINED";
+  const declinedRetry = await initialize(harness);
+
+  assert.equal(declinedRetry.response.status, 409);
+  assert.equal(declinedRetry.data.error, "Only accepted sessions can be paid.");
+  assert.equal(declinedRetry.data.paymentUrl, undefined);
+  assert.deepEqual(harness.state.payment, existingPayment);
 });
 
 test("payment status is scoped to the session-owning student", async () => {
@@ -280,7 +372,7 @@ test("invalid ITN signatures and mismatched gross amounts cannot mark a payment 
   assert.equal(harness.counters.serverValidation, 0);
 });
 
-test("verified ITN marks paid once, keeps payout ineligible, and blocks duplicate checkout", async () => {
+test("verified ITN marks paid once, emails one receipt, and exposes it only to the owning student", async () => {
   const harness = await createHarness();
   await initialize(harness);
   const validResponse = await sendItn(harness, makeItn(harness.state.payment));
@@ -288,14 +380,65 @@ test("verified ITN marks paid once, keeps payout ineligible, and blocks duplicat
   assert.equal(harness.state.payment.payment_status, "PAID");
   assert.equal(harness.state.payment.payout_status, "NOT_ELIGIBLE");
   assert.equal(harness.counters.serverValidation, 1);
+  assert.equal(harness.counters.payfastAddress, "197.97.145.144");
+  assert.equal(harness.counters.emailAttempts, 1);
+  assert.equal(harness.counters.emailedReceipt.receiptNumber, "EL-RCPT-5");
+  assert.equal(harness.counters.emailedReceipt.receiptUrl, "https://market.example.test/payments/receipt?sessionRequestId=10");
+
+  const receipt = await getReceipt(harness);
+  assert.equal(receipt.response.status, 200);
+  assert.equal(receipt.data.receipt.paymentStatus, "PAID");
+  assert.equal(receipt.data.receipt.studentEmail, "student@university.test");
+  assert.equal(receipt.data.receipt.subject, "Mathematics");
+
+  const anonymousReceipt = await getReceipt(harness, 7, false);
+  assert.equal(anonymousReceipt.response.status, 401);
+  const anotherStudentReceipt = await getReceipt(harness, 8);
+  assert.equal(anotherStudentReceipt.response.status, 404);
 
   const duplicateItn = await sendItn(harness, makeItn(harness.state.payment));
   assert.equal(duplicateItn.status, 200);
   assert.equal(harness.state.payment.payout_status, "NOT_ELIGIBLE");
   assert.equal(harness.counters.serverValidation, 2);
+  assert.equal(harness.counters.emailAttempts, 1);
 
   const duplicateCheckout = await initialize(harness);
   assert.equal(duplicateCheckout.response.status, 409);
+});
+
+test("receipt is unavailable before a payment is verified", async () => {
+  const harness = await createHarness();
+  await initialize(harness);
+  const receipt = await getReceipt(harness);
+  assert.equal(receipt.response.status, 404);
+  assert.equal(harness.counters.emailAttempts, 0);
+});
+
+test("SMTP failure leaves verified payment PAID and its receipt available", async () => {
+  const harness = await createHarness({ failReceiptEmail: true });
+  await initialize(harness);
+  const response = await sendItn(harness, makeItn(harness.state.payment));
+  assert.equal(response.status, 200);
+  assert.equal(harness.state.payment.payment_status, "PAID");
+  assert.equal(harness.counters.emailAttempts, 1);
+
+  const receipt = await getReceipt(harness);
+  assert.equal(receipt.response.status, 200);
+  assert.equal(receipt.data.receipt.receiptNumber, "EL-RCPT-5");
+});
+
+test("ITN cannot confirm a payment after its session is declined", async () => {
+  const harness = await createHarness();
+  await initialize(harness);
+  harness.state.session.status = "DECLINED";
+
+  const response = await sendItn(harness, makeItn(harness.state.payment));
+  assert.equal(response.status, 409);
+  assert.equal(harness.state.payment.payment_status, "PENDING");
+  assert.equal(harness.counters.serverValidation, 1);
+  assert.equal(harness.counters.emailAttempts, 0);
+  const receipt = await getReceipt(harness);
+  assert.equal(receipt.response.status, 404);
 });
 
 test("a signed cancelled notification records failure but never payment success", async () => {
@@ -306,4 +449,72 @@ test("a signed cancelled notification records failure but never payment success"
   assert.equal(response.status, 200);
   assert.equal(harness.state.payment.payment_status, "FAILED");
   assert.equal(harness.state.payment.payout_status, "NOT_ELIGIBLE");
+});
+
+test("admin payment access returns payment records without exposing secrets", async () => {
+  const originalDbQuery = db.query;
+  const originalRoles = tutorApplicationService.getEffectiveRoles;
+  const paymentsRows = [{
+    id: 15,
+    amount: "150.00",
+    currency: "ZAR",
+    payment_status: "PAID",
+    payout_status: "NOT_ELIGIBLE",
+    provider: "PAYFAST",
+    provider_reference: "EL-123",
+    payment_created_at: "2026-10-01T12:00:00.000Z",
+    paid_at: "2026-10-01T12:05:00.000Z",
+    session_request_id: 10,
+    subject: "Data Structures",
+    requested_date: "2026-10-02T10:00:00.000Z",
+    session_status: "ACCEPTED",
+    student_name: "Student Example",
+    tutor_name: "Tutor Example"
+  }];
+
+  db.query = async (text) => {
+    const query = String(text).replace(/\s+/g, " ").trim().toLowerCase();
+    if (query.includes("from payments p")) {
+      return { rows: paymentsRows };
+    }
+    return { rows: [] };
+  };
+
+  const tutorApplicationModule = require("../services/tutorApplications");
+  tutorApplicationModule.getEffectiveRoles = async (userId) => Number(userId) === 99 ? ["ADMIN"] : ["STUDENT"];
+  delete require.cache[require.resolve("../middleware/auth")];
+  delete require.cache[require.resolve("../routes/admin")];
+
+  const app = express();
+  app.use(express.json());
+  app.use(cookieParser());
+  app.use("/api/admin", require("../routes/admin"));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+
+  try {
+    const token = jwt.sign({ id: 99, email: "admin@example.test" }, process.env.JWT_SECRET || "easylearning_default_secret_key_change_in_prod");
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/admin/payments`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(data.payments[0].paymentStatus, "PAID");
+    assert.equal(data.payments[0].receiptNumber, "EL-RCPT-15");
+    assert.equal(data.payments[0].reference, "EL-123");
+    assert.equal(data.payments[0].studentName, "Student Example");
+    assert.equal(data.payments[0].tutorName, "Tutor Example");
+    assert.ok(!Object.prototype.hasOwnProperty.call(data.payments[0], "merchantKey"));
+    assert.ok(!Object.prototype.hasOwnProperty.call(data.payments[0], "password"));
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    db.query = originalDbQuery;
+    tutorApplicationService.getEffectiveRoles = originalRoles;
+    delete require.cache[require.resolve("../middleware/auth")];
+    delete require.cache[require.resolve("../routes/admin")];
+    if (require.cache[require.resolve("../services/tutorApplications")]) {
+      require.cache[require.resolve("../services/tutorApplications")].exports.getEffectiveRoles = originalRoles;
+    }
+  }
 });
