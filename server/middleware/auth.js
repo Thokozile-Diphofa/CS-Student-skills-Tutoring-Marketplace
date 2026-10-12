@@ -24,7 +24,16 @@ function authenticateToken(req, res, next) {
       req.user = { ...decoded, roles };
       next();
     } catch (error) {
-      console.error("Role lookup error:", error);
+      const errorCode = typeof error.code === "string" && /^[A-Z0-9_-]{1,32}$/i.test(error.code)
+        ? error.code
+        : "UNSPECIFIED";
+      const errorName = typeof error.name === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(error.name)
+        ? error.name
+        : "Error";
+      const stage = typeof error.roleLookupStage === "string"
+        ? error.roleLookupStage
+        : "unknown role lookup stage";
+      console.error("Role lookup failed:", { stage, errorCode, errorName });
       return res.status(500).json({ error: "Unable to verify account permissions." });
     }
   });

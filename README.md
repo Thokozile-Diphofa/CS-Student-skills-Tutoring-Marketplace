@@ -34,13 +34,32 @@ Uploaded documents are stored as private files; PostgreSQL stores only file refe
 metadata. No upload directory is served as static content. For production, provision a
 Render persistent disk for the Express service and set `PRIVATE_UPLOAD_DIR` to its absolute
 mount path (for example, `/var/data/private-documents`). The disk must be provisioned and
-may incur Render charges; without it, production startup fails rather than storing
-documents on ephemeral service storage. For local development, the backend uses
-`server/private-documents/`, which is git-ignored.
+may incur Render charges. Without `PRIVATE_UPLOAD_DIR`, the API still starts and
+authentication, tutor profiles, and application metadata remain available, but document
+uploads, replacements, downloads, document review, and application approval return a
+service-unavailable response. It never falls back to ephemeral local storage in production.
+For local development, the backend uses `server/private-documents/`, which is git-ignored.
+Setting `PRIVATE_UPLOAD_DIR` alone does not prove that storage is durable: the operator
+must point it to a provisioned persistent mount with private access controls.
 
 The PostgreSQL schema initializer applies additive, idempotent changes for application
 university snapshots and document verification records. `server/schema.sql` also contains
 the corresponding schema for new database installations.
+
+### Frontend/API connection in production
+
+Set `NEXT_PUBLIC_API_URL` in the Vercel frontend environment to the public Render API
+origin, for example `https://your-api.onrender.com` (without an `/api` path). On the Render
+service, set `CLIENT_URL` to the exact public frontend origin, including its scheme, such as
+`https://your-app.vercel.app`. This remains the primary allowed CORS origin and is also used
+for payment links.
+
+If the API must accept requests from additional known frontend origins, set
+`CORS_ALLOWED_ORIGINS` on Render to a comma-separated list of exact origins. Do not include
+paths or use `*`; credentialed browser requests require an explicit origin allowlist. Local
+development origins are allowed only when `NODE_ENV` is not `production`. Redeploy the
+frontend after changing `NEXT_PUBLIC_API_URL` and restart/redeploy the API after changing
+its CORS settings.
 
 ### Manual verification steps
 

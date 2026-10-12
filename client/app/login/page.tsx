@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "")
+  || (process.env.NODE_ENV === "development" ? "http://localhost:5000" : "");
 
 type LoginResponse = {
   error?: string;
@@ -27,6 +28,11 @@ export default function LoginPage() {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
+
+    if (!API_BASE_URL) {
+      setErrorMessage("Login service is not configured. Set NEXT_PUBLIC_API_URL to the Render API URL in Vercel.");
+      return;
+    }
 
     if (!email.trim() || !password) {
       setErrorMessage("Please enter both email and password.");

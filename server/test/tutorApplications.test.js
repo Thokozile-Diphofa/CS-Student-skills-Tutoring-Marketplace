@@ -14,6 +14,7 @@ const originalPool = db.pool;
 const originalEnsureSchema = tutorApplicationService.ensureTutorApplicationSchema;
 const originalGetEffectiveRoles = tutorApplicationService.getEffectiveRoles;
 const originalUploadDirectory = process.env.PRIVATE_UPLOAD_DIR;
+const originalNodeEnvironment = process.env.NODE_ENV;
 let activeHarness;
 
 async function createHarness() {
@@ -324,8 +325,63 @@ afterEach(async () => {
   tutorApplicationService.getEffectiveRoles = originalGetEffectiveRoles;
   if (originalUploadDirectory === undefined) delete process.env.PRIVATE_UPLOAD_DIR;
   else process.env.PRIVATE_UPLOAD_DIR = originalUploadDirectory;
+  if (originalNodeEnvironment === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = originalNodeEnvironment;
   delete require.cache[require.resolve("../middleware/auth")];
   delete require.cache[require.resolve("../routes/tutorApplications")];
+});
+
+test("document operations report unavailable when production has no durable private storage", async () => {
+  const harness = await createHarness();
+  process.env.NODE_ENV = "production";
+  delete process.env.PRIVATE_UPLOAD_DIR;
+
+  const applicationRead = await fetch(`${harness.url}/api/tutor-applications/me`, {
+    headers: { Authorization: `Bearer ${tokenFor(1)}` }
+  });
+  assert.equal(applicationRead.status, 200);
+  assert.deepEqual(await applicationRead.json(), { application: null });
+
+  const upload = await postApplication(harness.url, validApplication);
+  assert.equal(upload.response.status, 503);
+  assert.match(upload.data.error, /durable private storage/);
+
+  const replacementForm = new FormData();
+  replacementForm.append("document", createPdf("replacement.pdf"), "replacement.pdf");
+  const replacement = await fetch(`${harness.url}/api/tutor-applications/me/documents/registration`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${tokenFor(1)}` },
+    body: replacementForm
+  });
+  assert.equal(replacement.status, 503);
+  assert.match((await replacement.json()).error, /durable private storage/);
+
+  const download = await fetch(`${harness.url}/api/tutor-applications/1/documents/registration`, {
+    headers: { Authorization: `Bearer ${tokenFor(1)}` }
+  });
+  assert.equal(download.status, 503);
+
+  const documentReview = await fetch(`${harness.url}/api/tutor-applications/1/documents/registration/review`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${tokenFor(2)}`
+    },
+    body: JSON.stringify({ status: "VERIFIED" })
+  });
+  assert.equal(documentReview.status, 503);
+
+  const applicationApproval = await fetch(`${harness.url}/api/tutor-applications/1/review`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${tokenFor(2)}`
+    },
+    body: JSON.stringify({ status: "APPROVED" })
+  });
+  assert.equal(applicationApproval.status, 503);
+  assert.equal(harness.state.application, null);
+  assert.deepEqual(await fs.readdir(harness.directory), []);
 });
 
 test("application document validation, review, replacement, private access, and approval gates", async () => {
