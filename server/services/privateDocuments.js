@@ -22,7 +22,7 @@ function isInsideDirectory(parent, child) {
 function getPrivateUploadDirectory() {
   const configuredDirectory = process.env.PRIVATE_UPLOAD_DIR;
   if (process.env.NODE_ENV === "production" && !configuredDirectory) {
-    throw new Error("PRIVATE_UPLOAD_DIR must point to the Render persistent disk mount.");
+    return null;
   }
   if (configuredDirectory && process.env.NODE_ENV === "production" && !path.isAbsolute(configuredDirectory)) {
     throw new Error("PRIVATE_UPLOAD_DIR must be an absolute path in production.");
@@ -42,15 +42,40 @@ function getPrivateUploadDirectory() {
 
 async function ensurePrivateUploadDirectory() {
   const directory = getPrivateUploadDirectory();
+  if (!directory) return null;
   await fs.promises.mkdir(directory, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") await fs.promises.chmod(directory, 0o700);
   return directory;
 }
 
+function requirePrivateDocumentStorage(req, res, next) {
+  if (!getPrivateUploadDirectory()) {
+    return res.status(503).json({
+      error: "Private document storage is unavailable. Configure durable private storage before processing application documents."
+    });
+  }
+  next();
+}
+
+function requirePrivateStorageForApproval(req, res, next) {
+  if (req.body?.status === "APPROVED") {
+    return requirePrivateDocumentStorage(req, res, next);
+  }
+  next();
+}
+
 const storage = multer.diskStorage({
   destination(req, file, callback) {
     ensurePrivateUploadDirectory().then(
-      (directory) => callback(null, directory),
+      (directory) => {
+        if (!directory) {
+          const error = new Error("Private document storage is unavailable.");
+          error.statusCode = 503;
+          callback(error);
+          return;
+        }
+        callback(null, directory);
+      },
       (error) => callback(error)
     );
   },
@@ -184,10 +209,16 @@ function getDocumentMetadata(file) {
 }
 
 function getStoredDocumentPath(storageKey) {
+  const directory = getPrivateUploadDirectory();
+  if (!directory) {
+    const error = new Error("Private document storage is unavailable.");
+    error.statusCode = 503;
+    throw error;
+  }
   if (typeof storageKey !== "string" || !/^[0-9a-f-]{36}\.(pdf|jpg|jpeg|png)$/i.test(storageKey)) {
     throw new Error("Invalid stored document reference.");
   }
-  return path.join(getPrivateUploadDirectory(), storageKey);
+  return path.join(directory, storageKey);
 }
 
 async function removeUploadedFiles(files) {
@@ -219,6 +250,8 @@ module.exports = {
   getStoredDocumentPath,
   parseApplicationDocuments,
   parseReplacementDocument,
+  requirePrivateDocumentStorage,
+  requirePrivateStorageForApproval,
   removeStoredDocument,
   removeUploadedFiles,
   validateFileSignature

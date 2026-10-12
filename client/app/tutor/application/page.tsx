@@ -171,7 +171,13 @@ export default function TutorApplicationPage() {
 
       } catch (error) {
         console.error("Tutor application load failed:", error);
-        if (!cancelled) setPageError(error instanceof Error ? error.message : "We could not load your application. Please try again.");
+        if (!cancelled) {
+          setPageError(error instanceof TypeError
+            ? "Unable to connect to the application service. Check your internet connection and try again. If this continues, verify that NEXT_PUBLIC_API_URL points to the live API and that the API's CLIENT_URL or CORS_ALLOWED_ORIGINS includes this website's exact origin."
+            : error instanceof Error
+              ? error.message
+              : "We could not load your application. Please try again.");
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -475,26 +481,35 @@ export default function TutorApplicationPage() {
                 <p className="mt-1 text-sm text-[#625B71]">Upload current registration proof and your academic record. PDF, JPG, JPEG, or PNG only; maximum 5 MB per file.</p>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   {DOCUMENT_TYPES.map((type) => (
-                    <div key={type} className="rounded-lg border border-[#CFC4F8] bg-white p-4">
-                      <label htmlFor={`document-${type}`} className="block text-sm font-semibold text-[#241B3B]">
+                      <div key={type} className="rounded-lg border border-[#CFC4F8] bg-white p-4">
+                        <p id={`document-label-${type}`} className="text-sm font-semibold text-[#241B3B]">
                         {type === "registration" ? "Proof of University Registration" : "Academic Record"}
-                      </label>
+                        </p>
                       <input
                         id={`document-${type}`}
                         type="file"
                         required={!selectedDocuments[type]}
                         accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                         disabled={submitting}
-                        onChange={(event) => {
-                          handleInitialDocument(type, event.target.files?.[0] || null);
-                          event.currentTarget.value = "";
-                        }}
-                        className="mt-2 block w-full text-sm text-[#625B71] file:mr-3 file:rounded-md file:border-0 file:bg-[#F3EEFF] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#6C4CF1]"
-                      />
-                      <p className="mt-2 break-all text-xs text-[#625B71]">
-                        {selectedDocuments[type]?.name || "No file selected"}
-                      </p>
-                    </div>
+                          aria-labelledby={`document-label-${type}`}
+                          onChange={(event) => {
+                            handleInitialDocument(type, event.target.files?.[0] || null);
+                            event.currentTarget.value = "";
+                          }}
+                          className="sr-only"
+                        />
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <label
+                            htmlFor={`document-${type}`}
+                            className="inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-[#6C4CF1] px-4 py-2 text-sm font-semibold text-[#6C4CF1] transition hover:bg-[#6C4CF1]/5"
+                          >
+                            {selectedDocuments[type] ? "Replace file" : "Choose file"}
+                          </label>
+                          <p className="min-w-0 break-all text-sm text-[#625B71]" role="status">
+                            {selectedDocuments[type]?.name || "No file selected"}
+                          </p>
+                        </div>
+                      </div>
                   ))}
                 </div>
                 {documentError && <p className="mt-3 text-sm font-medium text-[#EF4444]" role="alert">{documentError}</p>}

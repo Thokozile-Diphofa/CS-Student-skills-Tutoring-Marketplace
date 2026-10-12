@@ -7,6 +7,8 @@ const {
   getStoredDocumentPath,
   parseApplicationDocuments,
   parseReplacementDocument,
+  requirePrivateDocumentStorage,
+  requirePrivateStorageForApproval,
   removeStoredDocument,
   removeUploadedFiles,
   validateFileSignature
@@ -144,6 +146,9 @@ function sendDocumentDownload(res, document) {
   try {
     filePath = getStoredDocumentPath(document.storage_key);
   } catch (error) {
+    if (error.statusCode === 503) {
+      return res.status(503).json({ error: "Private document storage is unavailable." });
+    }
     console.error("Invalid stored tutor application document reference:", error);
     return res.status(500).json({ error: "Unable to access this document." });
   }
@@ -219,7 +224,7 @@ router.get("/me", authenticateToken, async (req, res) => {
   }
 });
 
-router.post("/", authenticateToken, requireRole("STUDENT"), parseApplicationDocuments, async (req, res) => {
+router.post("/", authenticateToken, requireRole("STUDENT"), requirePrivateDocumentStorage, parseApplicationDocuments, async (req, res) => {
   let client;
   const uploadedFiles = getUploadedFiles(req);
   let filesPersisted = false;
@@ -344,7 +349,7 @@ router.post("/", authenticateToken, requireRole("STUDENT"), parseApplicationDocu
   }
 });
 
-router.put("/me/documents/:type", authenticateToken, requireRole("STUDENT"), parseReplacementDocument, async (req, res) => {
+router.put("/me/documents/:type", authenticateToken, requireRole("STUDENT"), requirePrivateDocumentStorage, parseReplacementDocument, async (req, res) => {
   const documentType = req.params.type;
   if (!isDocumentType(documentType)) {
     await removeUploadedFiles([req.file]);
@@ -413,7 +418,7 @@ router.put("/me/documents/:type", authenticateToken, requireRole("STUDENT"), par
   }
 });
 
-router.get("/:id/documents/:type", authenticateToken, async (req, res) => {
+router.get("/:id/documents/:type", authenticateToken, requirePrivateDocumentStorage, async (req, res) => {
   const applicationId = parseId(req.params.id);
   const documentType = req.params.type;
   if (!applicationId || !isDocumentType(documentType)) {
@@ -440,7 +445,7 @@ router.get("/:id/documents/:type", authenticateToken, async (req, res) => {
   }
 });
 
-router.patch("/:id/documents/:type/review", authenticateToken, requireRole("ADMIN"), async (req, res) => {
+router.patch("/:id/documents/:type/review", authenticateToken, requireRole("ADMIN"), requirePrivateDocumentStorage, async (req, res) => {
   const applicationId = parseId(req.params.id);
   const documentType = req.params.type;
   const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
@@ -563,7 +568,7 @@ router.get("/", authenticateToken, requireRole("ADMIN"), async (req, res) => {
   }
 });
 
-router.patch("/:id/review", authenticateToken, requireRole("ADMIN"), async (req, res) => {
+router.patch("/:id/review", authenticateToken, requireRole("ADMIN"), requirePrivateStorageForApproval, async (req, res) => {
   const applicationId = Number(req.params.id);
   const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   const { status, rejectionReason } = body;

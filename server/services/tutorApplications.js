@@ -1,11 +1,19 @@
 const db = require("../db");
 
-let schemaInitialized = false;
+let schemaInitializationPromise = null;
 
-async function ensureTutorApplicationSchema() {
-  if (schemaInitialized) return;
+async function runSchemaStep(stage, query, params) {
+  try {
+    return await db.query(query, params);
+  } catch (error) {
+    error.tutorApplicationSchemaStage = stage;
+    throw error;
+  }
+}
 
-  await db.query(`
+async function initializeTutorApplicationSchema() {
+  let stage = "create tutor profiles";
+  await runSchemaStep(stage, `
     CREATE TABLE IF NOT EXISTS tutor_profiles (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       headline VARCHAR(255) DEFAULT 'Computer Science & Mathematics Peer Tutor',
@@ -15,7 +23,8 @@ async function ensureTutorApplicationSchema() {
     );
   `);
 
-  await db.query(`
+  stage = "create tutor skills";
+  await runSchemaStep(stage, `
     CREATE TABLE IF NOT EXISTS tutor_skills (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -24,7 +33,8 @@ async function ensureTutorApplicationSchema() {
     );
   `);
 
-  await db.query(`
+  stage = "create tutor applications";
+  await runSchemaStep(stage, `
     CREATE TABLE IF NOT EXISTS tutor_applications (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -50,12 +60,14 @@ async function ensureTutorApplicationSchema() {
     );
   `);
 
-  await db.query(`
+  stage = "add university snapshot column";
+  await runSchemaStep(stage, `
     ALTER TABLE tutor_applications
     ADD COLUMN IF NOT EXISTS university_name VARCHAR(200);
   `);
 
-  await db.query(`
+  stage = "create tutor application documents";
+  await runSchemaStep(stage, `
     CREATE TABLE IF NOT EXISTS tutor_application_documents (
       id SERIAL PRIMARY KEY,
       application_id INTEGER NOT NULL REFERENCES tutor_applications(id) ON DELETE CASCADE,
@@ -76,7 +88,8 @@ async function ensureTutorApplicationSchema() {
     );
   `);
 
-  await db.query(`
+  stage = "backfill legacy tutor applications";
+  await runSchemaStep(stage, `
     INSERT INTO tutor_applications (user_id, subjects, proposed_hourly_rate, application_source)
     SELECT
       ur.user_id,
@@ -97,35 +110,54 @@ async function ensureTutorApplicationSchema() {
     ON CONFLICT (user_id) DO NOTHING;
   `);
 
-  await db.query(`
+  stage = "remove unapproved tutor roles";
+  await runSchemaStep(stage, `
     DELETE FROM user_roles ur
     USING tutor_applications ta
     WHERE ta.user_id = ur.user_id
       AND ur.role = 'TUTOR'
       AND ta.status <> 'APPROVED';
   `);
+}
 
-  schemaInitialized = true;
+async function ensureTutorApplicationSchema() {
+  if (!schemaInitializationPromise) {
+    schemaInitializationPromise = initializeTutorApplicationSchema().catch((error) => {
+      schemaInitializationPromise = null;
+      throw error;
+    });
+  }
+  return schemaInitializationPromise;
 }
 
 async function getEffectiveRoles(userId) {
-  await ensureTutorApplicationSchema();
-  const result = await db.query(`
-    SELECT ur.role
-    FROM user_roles ur
-    WHERE ur.user_id = $1
-      AND (
-        ur.role <> 'TUTOR'
-        OR EXISTS (
-          SELECT 1
-          FROM tutor_applications ta
-          WHERE ta.user_id = ur.user_id
-            AND ta.status = 'APPROVED'
+  try {
+    await ensureTutorApplicationSchema();
+  } catch (error) {
+    error.roleLookupStage = error.tutorApplicationSchemaStage || "initialize tutor application schema";
+    throw error;
+  }
+  try {
+    const result = await db.query(`
+      SELECT ur.role
+      FROM user_roles ur
+      WHERE ur.user_id = $1
+        AND (
+          ur.role <> 'TUTOR'
+          OR EXISTS (
+            SELECT 1
+            FROM tutor_applications ta
+            WHERE ta.user_id = ur.user_id
+              AND ta.status = 'APPROVED'
+          )
         )
-      )
-    ORDER BY ur.role ASC
-  `, [userId]);
-  return result.rows.map((row) => row.role);
+      ORDER BY ur.role ASC
+    `, [userId]);
+    return result.rows.map((row) => row.role);
+  } catch (error) {
+    error.roleLookupStage = "query effective user roles";
+    throw error;
+  }
 }
 
 module.exports = {

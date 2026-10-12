@@ -3,6 +3,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
+const { createCorsOptions, handleCorsError } = require("./middleware/cors");
 const authRoutes = require("./routes/auth");
 const adminRoutes = require("./routes/admin");
 const tutorRoutes = require("./routes/tutors");
@@ -43,21 +44,7 @@ function getErrorDetails(error, depth = 0) {
   return details;
 }
 
-// Dynamic CORS configuration for local development and specified client URL
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      const isLocalDevelopmentOrigin = process.env.NODE_ENV !== "production"
-        && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || "");
-      if (!origin || origin === CLIENT_URL || isLocalDevelopmentOrigin) {
-        callback(null, true);
-      } else {
-        callback(new Error("Origin is not allowed by CORS."));
-      }
-    },
-    credentials: true
-  })
-);
+app.use(cors(createCorsOptions()));
 
 app.use(express.json());
 app.use(cookieParser());
@@ -83,11 +70,16 @@ app.get("/api/test", (req, res) => {
   });
 });
 
+app.use(handleCorsError);
+
 // Initialize the authentication schema before accepting requests.
 initializeWithRetry(async () => {
   await authRoutes.initializeSchema();
   await ensureTutorApplicationSchema();
-  await ensurePrivateUploadDirectory();
+  const privateUploadDirectory = await ensurePrivateUploadDirectory();
+  if (!privateUploadDirectory) {
+    console.warn("Private tutor document storage is not configured; document uploads and downloads are unavailable.");
+  }
 })
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
