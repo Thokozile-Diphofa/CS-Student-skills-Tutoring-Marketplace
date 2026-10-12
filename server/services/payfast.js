@@ -63,6 +63,16 @@ function formatZarAmount(value) {
   return Number(amount) > 0 ? amount : null;
 }
 
+function getPayfastProcessUrl(value) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || !["sandbox.payfast.co.za", "www.payfast.co.za"].includes(parsed.hostname)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function getSandboxProcessUrl(value) {
   try {
     const parsed = new URL(value);
@@ -71,6 +81,12 @@ function getSandboxProcessUrl(value) {
   } catch {
     return null;
   }
+}
+
+function getPayfastValidationUrl(value) {
+  const processUrl = getPayfastProcessUrl(value);
+  if (!processUrl) return null;
+  return `${new URL(processUrl).origin}/eng/query/validate`;
 }
 
 function getSandboxValidationUrl(value) {
@@ -83,6 +99,8 @@ module.exports = {
   buildPayfastParameterString,
   formatZarAmount,
   generatePayfastSignature,
+  getPayfastProcessUrl,
+  getPayfastValidationUrl,
   getSandboxProcessUrl,
   getSandboxValidationUrl,
   isPayfastIp,

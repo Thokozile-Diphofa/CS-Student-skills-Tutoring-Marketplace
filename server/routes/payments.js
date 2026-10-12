@@ -9,7 +9,7 @@ const receiptEmail = require("../services/receiptEmail");
 const router = express.Router();
 
 function getPaymentConfig() {
-  const paymentUrl = payfast.getSandboxProcessUrl(process.env.PAYFAST_URL);
+  const paymentUrl = payfast.getPayfastProcessUrl(process.env.PAYFAST_URL);
   const merchantId = process.env.PAYFAST_MERCHANT_ID?.trim();
   const merchantKey = process.env.PAYFAST_MERCHANT_KEY?.trim();
   const notifyUrl = process.env.PAYFAST_NOTIFY_URL?.trim();
@@ -95,7 +95,7 @@ router.post("/initialize", authenticateToken, requireRole("STUDENT"), async (req
   }
 
   const config = getPaymentConfig();
-  if (!config) return res.status(503).json({ error: "PayFast Sandbox is not configured." });
+  if (!config) return res.status(503).json({ error: "PayFast is not configured." });
 
   let clientUrl;
   try {
@@ -259,7 +259,7 @@ router.get("/receipt/:sessionRequestId", authenticateToken, requireRole("STUDENT
 
 router.post("/payfast/notify", express.urlencoded({ extended: false, limit: "32kb" }), async (req, res) => {
   const config = getPaymentConfig();
-  if (!config) return res.status(503).send("Sandbox configuration unavailable");
+  if (!config) return res.status(503).send("PayFast configuration unavailable");
 
   const notification = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   if (Array.isArray(notification.signature) || !payfast.verifyPayfastSignature(notification, config.passphrase)) {
@@ -292,7 +292,7 @@ router.post("/payfast/notify", express.urlencoded({ extended: false, limit: "32k
       return res.status(400).send("Payment reference or amount mismatch");
     }
 
-    const validationUrl = payfast.getSandboxValidationUrl(process.env.PAYFAST_URL);
+    const validationUrl = payfast.getPayfastValidationUrl(process.env.PAYFAST_URL);
     const validationResponse = await fetch(validationUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },

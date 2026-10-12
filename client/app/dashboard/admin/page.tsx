@@ -8,6 +8,20 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 type ApplicationStatus = "PENDING" | "APPROVED" | "REJECTED";
 type ApplicationFilter = "ALL" | ApplicationStatus;
+type DocumentStatus = "PENDING" | "VERIFIED" | "REJECTED";
+type ApplicationDocumentType = "registration" | "academicRecord";
+
+interface ApplicationDocument {
+  type: ApplicationDocumentType;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: DocumentStatus;
+  rejectionReason: string | null;
+  uploadedAt: string;
+  reviewedAt: string | null;
+  downloadUrl: string;
+}
 
 interface AdminUser {
   id: number;
@@ -28,6 +42,7 @@ interface TutorApplication {
   institution: string;
   programme: string | null;
   yearOfStudy: number | null;
+  documents: ApplicationDocument[];
   subjects: string[];
   experience: string | null;
   motivation: string | null;
@@ -82,6 +97,7 @@ interface AdminDashboardData {
 }
 
 interface AdminSessionUser {
+  id: number;
   firstName: string;
   lastName: string;
   roles: string[];
@@ -144,7 +160,7 @@ function paymentStatusClass(status: string | null) {
   return "border-[#625B71]/20 bg-[#F3EEFF] text-[#625B71]";
 }
 
-function statusClass(status: ApplicationStatus) {
+function statusClass(status: ApplicationStatus | DocumentStatus) {
   if (status === "PENDING") return "border-[#FF8A4C]/40 bg-[#FF8A4C]/10 text-[#FF8A4C]";
   if (status === "APPROVED") return "border-[#22C55E]/40 bg-[#22C55E]/10 text-[#22C55E]";
   return "border-[#EF4444]/40 bg-[#EF4444]/10 text-[#EF4444]";
@@ -164,6 +180,11 @@ export default function AdminDashboardPage() {
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [showRejectionForm, setShowRejectionForm] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [documentReviewKey, setDocumentReviewKey] = useState<string | null>(null);
+  const [documentRejectionType, setDocumentRejectionType] = useState<ApplicationDocumentType | null>(null);
+  const [documentRejectionReason, setDocumentRejectionReason] = useState("");
+  const [documentReviewError, setDocumentReviewError] = useState("");
+  const [documentReviewNotice, setDocumentReviewNotice] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -189,6 +210,7 @@ export default function AdminDashboardPage() {
         const loaded = await fetchDashboardData();
         if (cancelled) return;
         setAdmin({
+          id: data.user.id,
           firstName: data.user.firstName,
           lastName: data.user.lastName,
           roles
@@ -259,8 +281,49 @@ export default function AdminDashboardPage() {
     }
   }
 
+  async function reviewDocument(documentType: ApplicationDocumentType, status: "VERIFIED" | "REJECTED") {
+    const selectedApplication = applications.find((application) => application.id === selectedApplicationId);
+    if (!selectedApplication) return;
+    if (status === "REJECTED" && !documentRejectionReason.trim()) {
+      setDocumentReviewError("Enter a reason before rejecting this document.");
+      return;
+    }
+
+    const reviewKey = `${selectedApplication.id}:${documentType}`;
+    setDocumentReviewKey(reviewKey);
+    setDocumentReviewError("");
+    setDocumentReviewNotice("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tutor-applications/${selectedApplication.id}/documents/${documentType}/review`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(status === "REJECTED"
+          ? { status, rejectionReason: documentRejectionReason.trim() }
+          : { status })
+      });
+      if (!response.ok) {
+        setDocumentReviewError(await readError(response, "The document could not be reviewed."));
+        return;
+      }
+
+      setDocumentReviewNotice(status === "VERIFIED" ? "Document verified." : "Document rejected.");
+      setDocumentRejectionType(null);
+      setDocumentRejectionReason("");
+      await refreshDashboard();
+    } catch {
+      setDocumentReviewError("We could not reach the server. The document was not updated.");
+    } finally {
+      setDocumentReviewKey(null);
+    }
+  }
+
   const filteredApplications = applications.filter((application) => filter === "ALL" || application.status === filter);
   const selectedApplication = applications.find((application) => application.id === selectedApplicationId) || null;
+  const documentsVerified = selectedApplication
+    && ["registration", "academicRecord"].every((type) =>
+      selectedApplication.documents.some((document) => document.type === type && document.status === "VERIFIED")
+    );
   const applicationCounts: Record<ApplicationFilter, number> = {
     ALL: applications.length,
     PENDING: applications.filter((application) => application.status === "PENDING").length,
@@ -419,7 +482,7 @@ export default function AdminDashboardPage() {
 
                   <dl className="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                     <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Institution</dt><dd className="mt-1 text-sm text-[#241B3B]">{selectedApplication.institution || "Not provided"}</dd></div>
-                    <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Programme / course</dt><dd className="mt-1 text-sm text-[#241B3B]">{selectedApplication.programme || "Not provided"}</dd></div>
+                    <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Qualification / degree or diploma</dt><dd className="mt-1 text-sm text-[#241B3B]">{selectedApplication.programme || "Not provided"}</dd></div>
                     <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Year of study</dt><dd className="mt-1 text-sm text-[#241B3B]">{selectedApplication.yearOfStudy ?? "Not provided"}</dd></div>
                     <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Subjects / modules</dt><dd className="mt-1 text-sm text-[#241B3B]">{selectedApplication.subjects?.join(", ") || "Not provided"}</dd></div>
                     <div><dt className="text-xs font-semibold uppercase text-[#625B71]">Proposed hourly rate</dt><dd className="mt-1 text-sm text-[#241B3B]">{formatRate(selectedApplication.proposedHourlyRate)}</dd></div>
@@ -428,6 +491,101 @@ export default function AdminDashboardPage() {
                     <div className="sm:col-span-2 lg:col-span-3"><dt className="text-xs font-semibold uppercase text-[#625B71]">Tutoring experience</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#241B3B]">{selectedApplication.experience || "Not provided"}</dd></div>
                     {selectedApplication.rejectionReason && <div className="sm:col-span-2 lg:col-span-3"><dt className="text-xs font-semibold uppercase text-[#625B71]">Rejection reason</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#241B3B]">{selectedApplication.rejectionReason}</dd></div>}
                   </dl>
+
+                  <section aria-label="Academic verification documents" className="mt-6 border-t border-[#CFC4F8]/50 pt-5">
+                    <h4 className="font-semibold text-[#241B3B]">Academic verification documents</h4>
+                    <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                      {(["registration", "academicRecord"] as ApplicationDocumentType[]).map((type) => {
+                        const document = selectedApplication.documents.find((item) => item.type === type);
+                        const title = type === "registration" ? "Proof of university registration" : "Academic record";
+                        const reviewKey = `${selectedApplication.id}:${type}`;
+                        return (
+                          <article key={type} className="rounded-lg border border-[#CFC4F8] bg-white p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-[#241B3B]">{title}</p>
+                                {document ? (
+                                  <>
+                                    <a
+                                      className="mt-1 inline-block break-all text-sm text-[#6C4CF1] underline"
+                                      href={`${API_BASE_URL}${document.downloadUrl}`}
+                                      download
+                                    >
+                                      {document.fileName}
+                                    </a>
+                                    <p className="mt-1 text-xs text-[#625B71]">Uploaded {formatDate(document.uploadedAt)}</p>
+                                    {document.rejectionReason && <p className="mt-2 text-sm text-[#EF4444]">{document.rejectionReason}</p>}
+                                  </>
+                                ) : <p className="mt-1 text-sm text-[#EF4444]">Missing required document</p>}
+                              </div>
+                              <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${document ? statusClass(document.status) : "border-[#EF4444]/40 bg-[#EF4444]/10 text-[#EF4444]"}`}>
+                                {document?.status || "MISSING"}
+                              </span>
+                            </div>
+
+                            {selectedApplication.status === "PENDING" && document && document.status !== "REJECTED" && (
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void reviewDocument(type, "VERIFIED")}
+                                  disabled={documentReviewKey !== null || selectedApplication.userId === admin.id}
+                                  className="rounded-lg bg-[#22C55E] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                                >
+                                  {documentReviewKey === reviewKey ? "Saving..." : "Verify document"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDocumentRejectionType(type);
+                                    setDocumentRejectionReason("");
+                                    setDocumentReviewError("");
+                                  }}
+                                  disabled={documentReviewKey !== null || selectedApplication.userId === admin.id}
+                                  className="rounded-lg border border-[#EF4444] px-3 py-2 text-sm font-semibold text-[#EF4444] disabled:opacity-50"
+                                >
+                                  Reject document
+                                </button>
+                              </div>
+                            )}
+                            {documentRejectionType === type && (
+                              <div className="mt-4">
+                                <label htmlFor={`document-rejection-${type}`} className="block text-sm font-semibold text-[#241B3B]">Rejection reason</label>
+                                <textarea
+                                  id={`document-rejection-${type}`}
+                                  value={documentRejectionReason}
+                                  onChange={(event) => setDocumentRejectionReason(event.target.value)}
+                                  maxLength={3000}
+                                  rows={3}
+                                  className="mt-2 w-full rounded-lg border border-[#CFC4F8] bg-white p-3 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30"
+                                />
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => void reviewDocument(type, "REJECTED")}
+                                    disabled={documentReviewKey !== null}
+                                    className="rounded-lg bg-[#EF4444] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                                  >
+                                    {documentReviewKey === reviewKey ? "Saving..." : "Confirm rejection"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setDocumentRejectionType(null); setDocumentReviewError(""); }}
+                                    disabled={documentReviewKey !== null}
+                                    className="px-3 py-2 text-sm font-semibold text-[#625B71] underline"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                    {selectedApplication.userId === admin.id && <p className="mt-3 text-sm text-[#EF4444]">You cannot review documents on your own application.</p>}
+                    {documentReviewError && <p className="mt-3 text-sm font-medium text-[#EF4444]" role="alert">{documentReviewError}</p>}
+                    {documentReviewNotice && <p className="mt-3 text-sm font-semibold text-[#22C55E]" role="status">{documentReviewNotice}</p>}
+                  </section>
 
                   {selectedApplication.status === "PENDING" && (
                     <div className="mt-6 border-t border-[#CFC4F8]/50 pt-5">
@@ -443,7 +601,8 @@ export default function AdminDashboardPage() {
                         </div>
                       ) : (
                         <div className="flex flex-wrap gap-3">
-                          <button type="button" onClick={() => void reviewApplication("APPROVED")} disabled={reviewingId !== null} className="rounded-lg bg-[#22C55E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60">{reviewingId === selectedApplication.id ? "Saving..." : "Approve Application"}</button>
+                          <button type="button" onClick={() => void reviewApplication("APPROVED")} disabled={reviewingId !== null || !documentsVerified} title={documentsVerified ? undefined : "Verify both required documents before approving."} className="rounded-lg bg-[#22C55E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60">{reviewingId === selectedApplication.id ? "Saving..." : "Approve Application"}</button>
+                          {!documentsVerified && <p className="basis-full text-sm text-[#FF8A4C]">Both documents must be verified before this application can be approved.</p>}
                           <button type="button" onClick={() => { setShowRejectionForm(true); setReviewError(""); }} disabled={reviewingId !== null} className="rounded-lg border border-[#EF4444] px-4 py-2 text-sm font-semibold text-[#EF4444] transition hover:bg-[#EF4444]/10 disabled:opacity-60">Reject Application</button>
                         </div>
                       )}

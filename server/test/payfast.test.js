@@ -5,6 +5,8 @@ const {
   buildPayfastParameterString,
   formatZarAmount,
   generatePayfastSignature,
+  getPayfastProcessUrl,
+  getPayfastValidationUrl,
   getSandboxProcessUrl,
   getSandboxValidationUrl,
   isPayfastIp,
@@ -36,10 +38,12 @@ test("PayFast signature includes a non-empty passphrase and skips an empty one",
   assert.equal(verifyPayfastSignature({ ...fields, amount: "1.00", signature: withPassphrase }, "my salt"), false);
 });
 
-test("PayFast accepts only Sandbox process URLs and derives Sandbox validation URL", () => {
-  assert.equal(getSandboxProcessUrl("https://sandbox.payfast.co.za/eng/process"), "https://sandbox.payfast.co.za/eng/process");
+test("PayFast accepts live and sandbox process URLs and derives the correct validation URL", () => {
+  assert.equal(getPayfastProcessUrl("https://sandbox.payfast.co.za/eng/process"), "https://sandbox.payfast.co.za/eng/process");
+  assert.equal(getPayfastProcessUrl("https://www.payfast.co.za/eng/process"), "https://www.payfast.co.za/eng/process");
   assert.equal(getSandboxProcessUrl("https://www.payfast.co.za/eng/process"), null);
   assert.equal(getSandboxProcessUrl("http://sandbox.payfast.co.za/eng/process"), null);
+  assert.equal(getPayfastValidationUrl("https://www.payfast.co.za/eng/process"), "https://www.payfast.co.za/eng/query/validate");
   assert.equal(getSandboxValidationUrl("https://sandbox.payfast.co.za/eng/process"), "https://sandbox.payfast.co.za/eng/query/validate");
 });
 
