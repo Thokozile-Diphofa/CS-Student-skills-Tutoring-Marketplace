@@ -54,3 +54,25 @@ CREATE TABLE IF NOT EXISTS tutor_applications (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE tutor_applications
+  ADD COLUMN IF NOT EXISTS university_name VARCHAR(200);
+
+CREATE TABLE IF NOT EXISTS tutor_application_documents (
+  id SERIAL PRIMARY KEY,
+  application_id INTEGER NOT NULL REFERENCES tutor_applications(id) ON DELETE CASCADE,
+  document_type VARCHAR(30) NOT NULL
+    CHECK (document_type IN ('registration', 'academicRecord')),
+  storage_key VARCHAR(255) NOT NULL UNIQUE,
+  original_name VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(100) NOT NULL
+    CHECK (mime_type IN ('application/pdf', 'image/jpeg', 'image/png')),
+  size_bytes INTEGER NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 5242880),
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+    CHECK (status IN ('PENDING', 'VERIFIED', 'REJECTED')),
+  rejection_reason TEXT,
+  uploaded_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE(application_id, document_type)
+);

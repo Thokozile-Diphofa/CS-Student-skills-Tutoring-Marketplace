@@ -7,6 +7,10 @@ import Navbar from "../../components/Navbar";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "")
   || (process.env.NODE_ENV === "development" ? "http://localhost:5000" : "");
+const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+const DOCUMENT_TYPES = ["registration", "academicRecord"] as const;
+type DocumentType = typeof DOCUMENT_TYPES[number];
+type DocumentStatus = "PENDING" | "VERIFIED" | "REJECTED";
 
 interface Applicant {
   firstName: string;
@@ -15,8 +19,21 @@ interface Applicant {
   institution: string;
 }
 
+interface ApplicationDocument {
+  type: DocumentType;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: DocumentStatus;
+  rejectionReason: string | null;
+  uploadedAt: string;
+  reviewedAt: string | null;
+  downloadUrl: string;
+}
+
 interface TutorApplication {
   id: number;
+  universityName: string | null;
   studentNumber: string | null;
   programme: string | null;
   yearOfStudy: number | null;
@@ -31,9 +48,11 @@ interface TutorApplication {
   submittedAt: string | null;
   reviewedAt: string | null;
   rejectionReason: string | null;
+  documents: ApplicationDocument[];
 }
 
 interface ApplicationForm {
+  universityName: string;
   studentNumber: string;
   programme: string;
   yearOfStudy: string;
@@ -45,6 +64,7 @@ interface ApplicationForm {
 }
 
 const emptyForm: ApplicationForm = {
+  universityName: "",
   studentNumber: "",
   programme: "",
   yearOfStudy: "",
@@ -66,6 +86,12 @@ export default function TutorApplicationPage() {
   const [application, setApplication] = useState<TutorApplication | null>(null);
   const [applicationStarted, setApplicationStarted] = useState(false);
   const [form, setForm] = useState<ApplicationForm>(emptyForm);
+  const [selectedDocuments, setSelectedDocuments] = useState<Record<DocumentType, File | null>>({
+    registration: null,
+    academicRecord: null
+  });
+  const [documentError, setDocumentError] = useState("");
+  const [replacementDocumentType, setReplacementDocumentType] = useState<DocumentType | null>(null);
   const [moduleInput, setModuleInput] = useState("");
   const [moduleError, setModuleError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -122,6 +148,7 @@ export default function TutorApplicationPage() {
         setApplication(loadedApplication);
         if (loadedApplication) {
           setForm({
+            universityName: loadedApplication.universityName || applicationData.applicant?.institution || "",
             studentNumber: loadedApplication.studentNumber || "",
             programme: loadedApplication.programme || "",
             yearOfStudy: loadedApplication.yearOfStudy?.toString() || "",
@@ -131,6 +158,15 @@ export default function TutorApplicationPage() {
             proposedHourlyRate: loadedApplication.proposedHourlyRate?.toString() || "",
             subjects: loadedApplication.subjects || []
           });
+          setApplication({
+            ...loadedApplication,
+            documents: loadedApplication.documents || []
+          });
+        } else {
+          setForm((current) => ({
+            ...current,
+            universityName: applicationData.applicant?.institution || authData.user.university || ""
+          }));
         }
 
       } catch (error) {
@@ -151,6 +187,60 @@ export default function TutorApplicationPage() {
 
   function updateForm(field: keyof Omit<ApplicationForm, "subjects">, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function validateDocumentFile(file: File) {
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    const allowed = extension === "pdf" && file.type === "application/pdf"
+      || (extension === "jpg" || extension === "jpeg") && file.type === "image/jpeg"
+      || extension === "png" && file.type === "image/png";
+    if (!allowed) return "Choose a PDF, JPG, JPEG, or PNG file.";
+    if (file.size > MAX_DOCUMENT_BYTES) return "Each document must be 5 MB or smaller.";
+    return "";
+  }
+
+  function handleInitialDocument(type: DocumentType, file: File | null) {
+    if (!file) return;
+    const error = validateDocumentFile(file);
+    if (error) {
+      setDocumentError(error);
+      return;
+    }
+    setDocumentError("");
+    setSelectedDocuments((current) => ({ ...current, [type]: file }));
+  }
+
+  async function replaceRejectedDocument(type: DocumentType, file: File | null) {
+    if (!file) return;
+    const error = validateDocumentFile(file);
+    if (error) {
+      setDocumentError(error);
+      return;
+    }
+    setDocumentError("");
+    setReplacementDocumentType(type);
+    try {
+      const data = new FormData();
+      data.append("document", file);
+      const response = await fetch(`${API_BASE_URL}/api/tutor-applications/me/documents/${type}`, {
+        method: "PUT",
+        credentials: "include",
+        body: data
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "The replacement document could not be uploaded.");
+      setApplication((current) => current ? {
+        ...current,
+        documents: [
+          ...current.documents.filter((document) => document.type !== type),
+          result.document as ApplicationDocument
+        ]
+      } : current);
+    } catch (error) {
+      setDocumentError(error instanceof Error ? error.message : "The replacement document could not be uploaded.");
+    } finally {
+      setReplacementDocumentType(null);
+    }
   }
 
   function addModule(value = moduleInput) {
@@ -190,6 +280,10 @@ export default function TutorApplicationPage() {
       setSubmitError("Add at least one module you can tutor.");
       return;
     }
+    if (!selectedDocuments.registration || !selectedDocuments.academicRecord) {
+      setSubmitError("Upload both proof of university registration and an academic record.");
+      return;
+    }
     const rate = Number(form.proposedHourlyRate);
     if (!Number.isFinite(rate) || rate <= 0) {
       setSubmitError("Enter a valid hourly rate greater than zero.");
@@ -198,22 +292,23 @@ export default function TutorApplicationPage() {
 
     setSubmitting(true);
     try {
+      const data = new FormData();
+      Object.entries(form).forEach(([key, value]) => {
+        data.append(key, key === "subjects" ? JSON.stringify(value) : String(value));
+      });
+      data.append("registration", selectedDocuments.registration);
+      data.append("academicRecord", selectedDocuments.academicRecord);
       const response = await fetch(`${API_BASE_URL}/api/tutor-applications`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          ...form,
-          yearOfStudy: Number(form.yearOfStudy),
-          proposedHourlyRate: rate
-        })
+        body: data
       });
-      const data = await response.json();
+      const result = await response.json();
       if (!response.ok) {
-        setSubmitError(data.error || "Your application could not be submitted.");
+        setSubmitError(result.error || "Your application could not be submitted.");
         return;
       }
-      setApplication(data.application);
+      setApplication(result.application);
     } catch (error) {
       console.error("Tutor application submission failed:", error);
       setSubmitError("We could not reach the server. Your application was not submitted.");
@@ -244,6 +339,12 @@ export default function TutorApplicationPage() {
             <h2 className="mt-2 text-2xl font-bold text-[#241B3B]">Tutor application approved</h2>
             <p className="mt-3 text-sm leading-6 text-[#625B71]">Your tutor application has been approved. Tutor access is now available.</p>
             <p className="mt-3 text-xs text-[#625B71]">Submitted {formatDate(application.submittedAt)}</p>
+            <ul className="mt-5 space-y-2 border-t border-[#CFC4F8]/40 pt-4">
+              {DOCUMENT_TYPES.map((type) => {
+                const document = application.documents.find((item) => item.type === type);
+                return <li key={type} className="text-sm text-[#241B3B]">{type === "registration" ? "Registration proof" : "Academic record"}: <span className="font-semibold text-[#22C55E]">{document?.status || "MISSING"}</span></li>;
+              })}
+            </ul>
             <a href="/dashboard/tutor" style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }} className="mt-6 inline-flex rounded-lg px-5 py-3 text-sm font-semibold text-white shadow-md hover:opacity-95">Open Tutor Dashboard</a>
           </section>
         ) : application?.status === "REJECTED" && submitted ? (
@@ -253,6 +354,18 @@ export default function TutorApplicationPage() {
             <p className="mt-3 text-sm leading-6 text-[#625B71]">Your tutor application was not approved. Please contact EasyLearning support if you need clarification.</p>
             {application.rejectionReason && <p className="mt-4 border-t border-[#CFC4F8]/40 pt-4 text-sm text-[#241B3B]">{application.rejectionReason}</p>}
             <p className="mt-3 text-xs text-[#625B71]">Submitted {formatDate(application.submittedAt)}</p>
+            <ul className="mt-5 space-y-2 border-t border-[#CFC4F8]/40 pt-4">
+              {DOCUMENT_TYPES.map((type) => {
+                const document = application.documents.find((item) => item.type === type);
+                return (
+                  <li key={type} className="text-sm text-[#241B3B]">
+                    <span className="font-medium">{type === "registration" ? "Registration proof" : "Academic record"}:</span>{" "}
+                    <span className="font-semibold">{document?.status || "MISSING"}</span>
+                    {document?.rejectionReason && <span className="block text-[#EF4444]">{document.rejectionReason}</span>}
+                  </li>
+                );
+              })}
+            </ul>
           </section>
         ) : submitted ? (
           <section className="rounded-xl border-l-4 border-[#FF8A4C] border-y border-r border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm sm:p-8">
@@ -260,6 +373,43 @@ export default function TutorApplicationPage() {
             <h2 className="mt-2 text-2xl font-bold text-[#241B3B]">Tutor application submitted</h2>
             <p className="mt-3 text-sm leading-6 text-[#625B71]">Thank you for applying to become an EasyLearning tutor. Your application is pending review.</p>
             <p className="mt-3 text-xs text-[#625B71]">Submitted {formatDate(application?.submittedAt || null)}</p>
+            <div className="mt-6 space-y-4 border-t border-[#CFC4F8]/40 pt-5">
+              <h3 className="font-semibold text-[#241B3B]">Academic verification documents</h3>
+              {DOCUMENT_TYPES.map((type) => {
+                const document = application?.documents.find((item) => item.type === type);
+                const title = type === "registration" ? "Proof of university registration" : "Academic record";
+                return (
+                  <div key={type} className="rounded-lg border border-[#CFC4F8] bg-white p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[#241B3B]">{title}</p>
+                        <p className="mt-1 text-sm text-[#625B71]">{document?.fileName || "No document submitted"}</p>
+                        <p className={`mt-1 text-xs font-semibold ${document?.status === "VERIFIED" ? "text-[#22C55E]" : document?.status === "REJECTED" ? "text-[#EF4444]" : "text-[#FF8A4C]"}`}>
+                          {document?.status || "MISSING"}
+                        </p>
+                        {document?.rejectionReason && <p className="mt-2 text-sm text-[#EF4444]" role="alert">{document.rejectionReason}</p>}
+                      </div>
+                      {document?.status === "REJECTED" && application?.status === "PENDING" && (
+                        <label className="cursor-pointer rounded-lg border border-[#6C4CF1] px-3 py-2 text-sm font-semibold text-[#6C4CF1]">
+                          {replacementDocumentType === type ? "Uploading..." : "Replace document"}
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                            className="sr-only"
+                            disabled={replacementDocumentType !== null}
+                            onChange={(event) => {
+                              void replaceRejectedDocument(type, event.target.files?.[0] || null);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {documentError && <p className="text-sm font-medium text-[#EF4444]" role="alert">{documentError}</p>}
+            </div>
             {!application?.emailVerified && (
               <p className="mt-5 border-t border-[#CFC4F8]/40 pt-4 text-sm leading-6 text-[#FF8A4C]">
                 Email verification is not configured, and your email is not marked as verified. Verification is not required for an administrator to review this application.
@@ -299,11 +449,15 @@ export default function TutorApplicationPage() {
                 <h2 id="academic-heading" className="text-lg font-bold text-[#241B3B]">Academic information</h2>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <div>
+                    <label htmlFor="university-name" className="mb-1.5 block text-sm font-medium text-[#241B3B]">University name</label>
+                    <input id="university-name" required maxLength={200} value={form.universityName} onChange={(event) => updateForm("universityName", event.target.value)} className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
+                  </div>
+                  <div>
                     <label htmlFor="student-number" className="mb-1.5 block text-sm font-medium text-[#241B3B]">Student number <span className="font-normal text-[#625B71]">(optional)</span></label>
                     <input id="student-number" value={form.studentNumber} maxLength={80} onChange={(event) => updateForm("studentNumber", event.target.value)} className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
                   </div>
                   <div>
-                    <label htmlFor="programme" className="mb-1.5 block text-sm font-medium text-[#241B3B]">Programme or course</label>
+                    <label htmlFor="programme" className="mb-1.5 block text-sm font-medium text-[#241B3B]">Qualification or degree/diploma</label>
                     <input id="programme" required maxLength={200} value={form.programme} onChange={(event) => updateForm("programme", event.target.value)} className="w-full rounded-lg border border-[#CFC4F8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#6C4CF1] focus:ring-2 focus:ring-[#6C4CF1]/30" />
                   </div>
                   <div>
@@ -314,6 +468,36 @@ export default function TutorApplicationPage() {
                     </select>
                   </div>
                 </div>
+              </section>
+
+              <section aria-labelledby="verification-heading">
+                <h2 id="verification-heading" className="text-lg font-bold text-[#241B3B]">Academic Verification Documents</h2>
+                <p className="mt-1 text-sm text-[#625B71]">Upload current registration proof and your academic record. PDF, JPG, JPEG, or PNG only; maximum 5 MB per file.</p>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  {DOCUMENT_TYPES.map((type) => (
+                    <div key={type} className="rounded-lg border border-[#CFC4F8] bg-white p-4">
+                      <label htmlFor={`document-${type}`} className="block text-sm font-semibold text-[#241B3B]">
+                        {type === "registration" ? "Proof of University Registration" : "Academic Record"}
+                      </label>
+                      <input
+                        id={`document-${type}`}
+                        type="file"
+                        required={!selectedDocuments[type]}
+                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                        disabled={submitting}
+                        onChange={(event) => {
+                          handleInitialDocument(type, event.target.files?.[0] || null);
+                          event.currentTarget.value = "";
+                        }}
+                        className="mt-2 block w-full text-sm text-[#625B71] file:mr-3 file:rounded-md file:border-0 file:bg-[#F3EEFF] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#6C4CF1]"
+                      />
+                      <p className="mt-2 break-all text-xs text-[#625B71]">
+                        {selectedDocuments[type]?.name || "No file selected"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {documentError && <p className="mt-3 text-sm font-medium text-[#EF4444]" role="alert">{documentError}</p>}
               </section>
 
               <section aria-labelledby="tutoring-heading">
@@ -399,7 +583,7 @@ export default function TutorApplicationPage() {
               {submitError && <p className="text-sm font-medium text-[#EF4444]" role="alert">{submitError}</p>}
               <div className="border-t border-[#CFC4F8]/40 pt-5">
                 <p className="mb-4 text-xs leading-5 text-[#625B71]">Email verification is not available yet. Submitting records a pending application; it does not verify your email or grant Tutor access.</p>
-                <button type="submit" disabled={submitting} style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }} className="inline-flex min-h-11 items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60">
+                <button type="submit" disabled={submitting || !selectedDocuments.registration || !selectedDocuments.academicRecord} style={{ background: "linear-gradient(90deg, #6C4CF1, #8B5CF6)" }} className="inline-flex min-h-11 items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60">
                   {submitting ? "Submitting application..." : "Submit Application"}
                 </button>
               </div>

@@ -10,6 +10,7 @@ const tutorApplicationRoutes = require("./routes/tutorApplications");
 const sessionRequestRoutes = require("./routes/sessionRequests");
 const paymentRoutes = require("./routes/payments");
 const { ensureTutorApplicationSchema } = require("./services/tutorApplications");
+const { ensurePrivateUploadDirectory } = require("./services/privateDocuments");
 const { initializeWithRetry } = require("./services/startupInitialization");
 
 const app = express();
@@ -86,6 +87,7 @@ app.get("/api/test", (req, res) => {
 initializeWithRetry(async () => {
   await authRoutes.initializeSchema();
   await ensureTutorApplicationSchema();
+  await ensurePrivateUploadDirectory();
 })
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
