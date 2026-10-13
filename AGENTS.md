@@ -128,8 +128,15 @@ Implemented session-request routes:
 - `GET /api/session-requests/incoming` (authenticated; requires `TUTOR`; returns only requests addressed to the current tutor)
 - `PATCH /api/session-requests/:id/respond` (authenticated; requires `TUTOR`; accepts or declines a PENDING request addressed to the current tutor)
 
-Email verification, notification, messaging, booking, review, and reporting routes
-are not implemented yet. Keep this section in sync as future endpoints are added.
+Email verification, notification, messaging, booking, and review routes are not implemented yet.
+The implemented report routes are listed below; keep this section in sync as future endpoints are added.
+
+Implemented report routes:
+- `POST /api/reports` (authenticated; requires `STUDENT`, `TUTOR`, or `ADMIN`; associates the report with the authenticated user and role snapshot; optional private PDF/JPG/JPEG/PNG attachment up to 5 MiB)
+- `GET /api/reports/mine` (authenticated; returns only the current user's reports and user-visible responses)
+- `GET /api/reports/admin` (authenticated; requires `ADMIN`; returns the report queue with optional status/category filters)
+- `POST /api/reports/:id/status` (authenticated; requires `ADMIN`; changes status and optionally sets a user-visible response)
+- `GET /api/reports/:id/attachment` (authenticated; owning reporter or `ADMIN`; redirects to a short-lived signed URL only after server-side authorization)
 
 ## 7. Security
 

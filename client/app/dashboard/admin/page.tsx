@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardShell from "../../components/DashboardShell";
+import AdminReportsSection from "../../components/AdminReportsSection";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -384,6 +385,8 @@ export default function AdminDashboardPage() {
                 ))}
               </div>
             </section>
+
+            <AdminReportsSection />
 
             <section aria-labelledby="applications-heading" className="border-t border-[#CFC4F8] py-7">
               <div className="flex flex-wrap items-end justify-between gap-4">

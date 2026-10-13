@@ -8,6 +8,29 @@ const { authenticateToken } = require("../middleware/auth");
 const { getEffectiveRoles } = require("../services/tutorApplications");
 
 const router = express.Router();
+const DATABASE_CONNECTION_ERROR_CODES = new Set([
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH"
+]);
+
+function findDatabaseConnectionErrorCode(error, visited = new Set()) {
+  if (!error || typeof error !== "object" || visited.has(error)) return null;
+  visited.add(error);
+
+  if (DATABASE_CONNECTION_ERROR_CODES.has(error.code)) return error.code;
+  if (Array.isArray(error.errors)) {
+    for (const nestedError of error.errors) {
+      const code = findDatabaseConnectionErrorCode(nestedError, visited);
+      if (code) return code;
+    }
+  }
+  return error.cause ? findDatabaseConnectionErrorCode(error.cause, visited) : null;
+}
 
 let schemaInitialized = false;
 async function ensureSchema() {
@@ -296,8 +319,20 @@ router.post("/login", async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Login error:", error);
-    return res.status(500).json({ error: "Server error during login: " + error.message });
+    const connectionErrorCode = findDatabaseConnectionErrorCode(error);
+    const errorName = typeof error.name === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(error.name)
+      ? error.name
+      : "Error";
+    console.error("Login failed:", {
+      errorName,
+      errorCode: connectionErrorCode || "UNSPECIFIED"
+    });
+    if (connectionErrorCode) {
+      return res.status(503).json({
+        error: "Login is temporarily unavailable because the database cannot be reached. Check the server database configuration and try again."
+      });
+    }
+    return res.status(500).json({ error: "Unable to log in right now. Please try again." });
   }
 });
 

@@ -112,6 +112,17 @@ const upload = multer({
   },
   fileFilter: (req, file, callback) => validateDeclaredFile(file, callback)
 });
+const reportAttachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_DOCUMENT_BYTES,
+    files: 1,
+    fields: 3,
+    fieldSize: 16 * 1024,
+    parts: 4
+  },
+  fileFilter: (req, file, callback) => validateDeclaredFile(file, callback)
+});
 
 function respondToUploadError(error, res, message) {
   const status = error instanceof multer.MulterError ? 400 : error.statusCode || 500;
@@ -143,6 +154,13 @@ function parseReplacementDocument(req, res, next) {
       return;
     }
     respondToUploadError(error, res, "The replacement document must be 5 MB or smaller.");
+  });
+}
+
+function parseReportAttachment(req, res, next) {
+  reportAttachmentUpload.single("attachment")(req, res, (error) => {
+    if (!error) return next();
+    respondToUploadError(error, res, "The attachment must be 5 MB or smaller.");
   });
 }
 
@@ -229,7 +247,7 @@ async function removeUploadedFiles(files) {
     try {
       await removeStoredDocument(file.storageKey);
     } catch (error) {
-      console.error("Unable to remove an unreferenced tutor application document.", {
+      console.error("Unable to remove an unreferenced private upload.", {
         operation: error.storageOperation || "delete"
       });
     }
@@ -242,6 +260,7 @@ module.exports = {
   getSignedDocumentUrl,
   hasPrivateDocumentStorageConfiguration,
   parseApplicationDocuments,
+  parseReportAttachment,
   parseReplacementDocument,
   requirePrivateDocumentStorage,
   requirePrivateStorageForApproval,

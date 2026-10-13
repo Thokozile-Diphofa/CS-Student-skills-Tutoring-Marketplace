@@ -46,11 +46,15 @@ async function createHarness({
     nextId: 2,
     legacyRoleNullable: false,
     failRoleInsert,
-    failMigration
+    failMigration,
+    loginFailure: null
   };
 
   const fakeQuery = async (text, params = []) => {
     const query = text.replace(/\s+/g, " ").trim().toLowerCase();
+    if (state.loginFailure && query.includes("from users where lower(email)")) {
+      throw state.loginFailure;
+    }
     if (query.includes("select ur.role")) {
       const userId = Number(params[0]);
       const roles = [...(state.roles.get(userId) || [])]
@@ -484,6 +488,53 @@ test("TUTOR intent grants only STUDENT and ADMIN registration is rejected", asyn
 
   assert.equal(reservedEmailAttempt.response.status, 400);
   assert.equal([...harness.state.users.values()].some((user) => user.email === "admin@universitydomain"), false);
+});
+
+test("login returns a safe database-unavailable response for DNS resolution failures", async () => {
+  const harness = await createHarness();
+  harness.state.loginFailure = new AggregateError(
+    [Object.assign(new Error("getaddrinfo ENOTFOUND private-db.example.test"), { code: "ENOTFOUND" })],
+    "database lookup failed"
+  );
+  const originalError = console.error;
+  const loggedErrors = [];
+  console.error = (...values) => loggedErrors.push(values);
+  let login;
+  try {
+    login = await postJson(`${harness.url}/api/auth/login`, {
+      email: "224696743@tut4life.ac.za",
+      password: "existing-test-password"
+    });
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(login.response.status, 503);
+  assert.match(login.data.error, /database cannot be reached/);
+  assert.equal(JSON.stringify(login.data).includes("private-db.example.test"), false);
+  assert.deepEqual(loggedErrors, [["Login failed:", { errorName: "AggregateError", errorCode: "ENOTFOUND" }]]);
+});
+
+test("login returns a generic safe server error for unexpected database failures", async () => {
+  const harness = await createHarness();
+  harness.state.loginFailure = new Error("database-password and host details must stay private");
+  const originalError = console.error;
+  const loggedErrors = [];
+  console.error = (...values) => loggedErrors.push(values);
+  let login;
+  try {
+    login = await postJson(`${harness.url}/api/auth/login`, {
+      email: "224696743@tut4life.ac.za",
+      password: "existing-test-password"
+    });
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(login.response.status, 500);
+  assert.equal(login.data.error, "Unable to log in right now. Please try again.");
+  assert.equal(JSON.stringify(login.data).includes("database-password"), false);
+  assert.deepEqual(loggedErrors, [["Login failed:", { errorName: "Error", errorCode: "UNSPECIFIED" }]]);
 });
 
 test("registration rolls back the user if the student role insert fails", async () => {
