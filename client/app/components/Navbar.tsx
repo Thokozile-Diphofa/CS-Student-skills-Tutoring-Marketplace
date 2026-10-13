@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getDashboardPath } from "../lib/dashboardRouting";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 const AUTH_METADATA_KEYS = ["user_roles", "user_email", "user_name"];
@@ -152,7 +151,7 @@ export default function Navbar() {
     <header className="border-b border-[#6C4CF1]/30 bg-[#241B3B] text-white shadow-md">
       <nav aria-label="Main navigation" className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-5 gap-y-3 px-5 py-4 sm:px-8">
         <Link
-          href={authStatus === "signed-in" ? getDashboardPath(roles) || "/" : "/"}
+          href="/"
           className="flex items-center gap-3"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FFD166] text-lg font-black text-[#241B3B] shadow-sm">E</span>
