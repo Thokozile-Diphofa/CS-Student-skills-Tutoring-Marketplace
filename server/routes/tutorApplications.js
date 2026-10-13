@@ -3,17 +3,16 @@ const db = require("../db");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const { ensureTutorApplicationSchema } = require("../services/tutorApplications");
 const {
-  getDocumentMetadata,
-  getStoredDocumentPath,
+  getSignedDocumentUrl,
   parseApplicationDocuments,
   parseReplacementDocument,
   requirePrivateDocumentStorage,
   requirePrivateStorageForApproval,
   removeStoredDocument,
   removeUploadedFiles,
+  storeUploadedDocument,
   validateFileSignature
 } = require("../services/privateDocuments");
-const fs = require("node:fs");
 
 const router = express.Router();
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -141,37 +140,22 @@ function addDocumentsToApplication(application, documents) {
   };
 }
 
-function sendDocumentDownload(res, document) {
-  let filePath;
+async function sendDocumentDownload(res, document) {
   try {
-    filePath = getStoredDocumentPath(document.storage_key);
+    const signedUrl = await getSignedDocumentUrl(document.storage_key, document.original_name);
+    res.setHeader("Cache-Control", "private, no-store");
+    return res.redirect(302, signedUrl);
   } catch (error) {
     if (error.statusCode === 503) {
       return res.status(503).json({ error: "Private document storage is unavailable." });
     }
-    console.error("Invalid stored tutor application document reference:", error);
-    return res.status(500).json({ error: "Unable to access this document." });
-  }
-
-  const fallbackName = document.original_name
-    .replace(/[^\x20-\x7e]/g, "_")
-    .replace(/["\\]/g, "_");
-  const encodedName = encodeURIComponent(document.original_name).replace(/['()]/g, escape);
-  res.setHeader("Content-Type", document.mime_type);
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Cache-Control", "private, no-store");
-  res.setHeader("Content-Disposition", `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodedName}`);
-  const stream = fs.createReadStream(filePath);
-  stream.on("error", (error) => {
-    console.error("Tutor application document read error:", error);
-    if (res.headersSent) res.destroy(error);
-    else {
-      res.removeHeader("Content-Disposition");
-      res.status(404).json({ error: "Document is not available." });
+    if (error.storageOperation) {
+      console.error("Tutor application storage operation failed.", { operation: error.storageOperation });
+    } else {
+      console.error("Invalid stored tutor application document reference.");
     }
-  });
-  stream.pipe(res);
-  return undefined;
+    return res.status(500).json({ error: "Unable to download this document." });
+  }
 }
 
 router.get("/subjects", authenticateToken, async (req, res) => {
@@ -256,8 +240,8 @@ router.post("/", authenticateToken, requireRole("STUDENT"), requirePrivateDocume
     const normalizedSubjects = subjectValidation.subjects;
     const rate = Number(body.proposedHourlyRate);
     const yearOfStudy = Number(body.yearOfStudy);
-    const registrationMetadata = getDocumentMetadata(registrationFile);
-    const academicRecordMetadata = getDocumentMetadata(academicRecordFile);
+    const registrationMetadata = await storeUploadedDocument(registrationFile);
+    const academicRecordMetadata = await storeUploadedDocument(academicRecordFile);
 
     client = await db.pool.connect();
     await client.query("BEGIN");
@@ -337,8 +321,15 @@ router.post("/", authenticateToken, requireRole("STUDENT"), requirePrivateDocume
     return res.status(201).json({ application: addDocumentsToApplication(result.rows[0], documentsResult.rows) });
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
+    if (error.statusCode === 503) {
+      return res.status(503).json({ error: "Private document storage is unavailable." });
+    }
     if (error.statusCode === 415) return res.status(415).json({ error: error.message });
-    console.error("Submit tutor application error:", error);
+    if (error.storageOperation) {
+      console.error("Tutor application storage operation failed.", { operation: error.storageOperation });
+      return res.status(500).json({ error: "Unable to submit your tutor application." });
+    }
+    console.error("Submit tutor application error:", { name: error.name, code: error.code });
     if (error.code === "23505") {
       return res.status(409).json({ error: "An application has already been submitted for this account." });
     }
@@ -362,7 +353,7 @@ router.put("/me/documents/:type", authenticateToken, requireRole("STUDENT"), req
   try {
     await ensureTutorApplicationSchema();
     await validateFileSignature(req.file);
-    const metadata = getDocumentMetadata(req.file);
+    const metadata = await storeUploadedDocument(req.file);
     client = await db.pool.connect();
     await client.query("BEGIN");
     const applicationResult = await client.query(
@@ -402,15 +393,24 @@ router.put("/me/documents/:type", authenticateToken, requireRole("STUDENT"), req
     try {
       await removeStoredDocument(previousStorageKey);
     } catch (cleanupError) {
-      console.error("Unable to remove replaced tutor application document:", cleanupError);
+      console.error("Unable to remove replaced tutor application document.", {
+        operation: cleanupError.storageOperation || "delete"
+      });
     }
     return res.json({ document: serializeDocument(replacementResult.rows[0]) });
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
-    console.error("Replace tutor application document error:", error);
+    if (error.statusCode === 503) {
+      return res.status(503).json({ error: "Private document storage is unavailable." });
+    }
     if (error.message === "The file contents do not match the selected document type.") {
       return res.status(415).json({ error: error.message });
     }
+    if (error.storageOperation) {
+      console.error("Tutor application storage operation failed.", { operation: error.storageOperation });
+      return res.status(500).json({ error: "Unable to replace this document." });
+    }
+    console.error("Replace tutor application document error:", { name: error.name });
     return res.status(500).json({ error: "Unable to replace this document." });
   } finally {
     client?.release();
@@ -438,7 +438,7 @@ router.get("/:id/documents/:type", authenticateToken, requirePrivateDocumentStor
     if (!req.user.roles.includes("ADMIN") && Number(document.user_id) !== Number(req.user.id)) {
       return res.status(404).json({ error: "Document not found." });
     }
-    return sendDocumentDownload(res, document);
+    return await sendDocumentDownload(res, document);
   } catch (error) {
     console.error("Download tutor application document error:", error);
     return res.status(500).json({ error: "Unable to download this document." });

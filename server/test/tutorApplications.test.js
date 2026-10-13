@@ -1,11 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs/promises");
-const os = require("node:os");
-const path = require("node:path");
 const { afterEach, test } = require("node:test");
 const cookieParser = require("cookie-parser");
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const supabaseSdk = require("@supabase/supabase-js");
 const db = require("../db");
 const tutorApplicationService = require("../services/tutorApplications");
 
@@ -13,20 +11,73 @@ const originalQuery = db.query;
 const originalPool = db.pool;
 const originalEnsureSchema = tutorApplicationService.ensureTutorApplicationSchema;
 const originalGetEffectiveRoles = tutorApplicationService.getEffectiveRoles;
-const originalUploadDirectory = process.env.PRIVATE_UPLOAD_DIR;
 const originalNodeEnvironment = process.env.NODE_ENV;
+const originalCreateClient = supabaseSdk.createClient;
+const originalStorageEnvironment = {
+  SUPABASE_URL: process.env.SUPABASE_URL,
+  SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
+  SUPABASE_BUCKET: process.env.SUPABASE_BUCKET
+};
 let activeHarness;
+let harnessNumber = 0;
 
 async function createHarness() {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "easylearning-documents-"));
-  process.env.PRIVATE_UPLOAD_DIR = directory;
+  process.env.SUPABASE_URL = `https://easylearning-test-${++harnessNumber}.supabase.co`;
+  process.env.SUPABASE_SECRET_KEY = "test-secret-key";
+  process.env.SUPABASE_BUCKET = "tutor-documents";
+  const objectStore = new Map();
   const state = {
     application: null,
     documents: [],
+    objectStore,
+    storageCalls: [],
+    storageFailure: null,
     tutorSkills: [],
     roles: { 1: ["STUDENT"], 2: ["ADMIN"], 3: ["STUDENT"] },
     nextApplicationId: 1,
     nextDocumentId: 1
+  };
+  supabaseSdk.createClient = (url, secretKey, options) => {
+    assert.equal(url, process.env.SUPABASE_URL);
+    assert.equal(secretKey, process.env.SUPABASE_SECRET_KEY);
+    assert.deepEqual(options.auth, { autoRefreshToken: false, persistSession: false });
+    return {
+      storage: {
+        from(bucket) {
+          assert.equal(bucket, "tutor-documents");
+          return {
+            async upload(key, body, uploadOptions) {
+              state.storageCalls.push({ operation: "upload", key, ...uploadOptions });
+              if (state.storageFailure === "upload") {
+                return { data: null, error: { message: "private-test-secret-key" } };
+              }
+              objectStore.set(key, Buffer.from(body));
+              return { data: { path: key }, error: null };
+            },
+            async createSignedUrl(key, expiresIn, signedUrlOptions) {
+              state.storageCalls.push({ operation: "signed-url", key, expiresIn, ...signedUrlOptions });
+              if (state.storageFailure === "signed-url") {
+                return { data: null, error: { message: "private-test-secret-key" } };
+              }
+              return {
+                data: {
+                  signedUrl: `${url}/storage/v1/object/sign/tutor-documents/${key}?token=private-signed-token`
+                },
+                error: null
+              };
+            },
+            async remove(keys) {
+              state.storageCalls.push({ operation: "delete", keys });
+              if (state.storageFailure === "delete") {
+                return { data: null, error: { message: "private-test-secret-key" } };
+              }
+              for (const key of keys) objectStore.delete(key);
+              return { data: { message: "Removed" }, error: null };
+            }
+          };
+        }
+      }
+    };
   };
 
   const fakeQuery = async (text, params = []) => {
@@ -247,7 +298,7 @@ async function createHarness() {
   activeHarness = {
     server,
     state,
-    directory,
+    objectStore,
     url: `http://127.0.0.1:${address.port}`
   };
   return activeHarness;
@@ -316,15 +367,17 @@ async function reviewDocument(url, type, body, userId = 2) {
 afterEach(async () => {
   if (activeHarness) {
     await new Promise((resolve, reject) => activeHarness.server.close((error) => error ? reject(error) : resolve()));
-    await fs.rm(activeHarness.directory, { recursive: true, force: true });
     activeHarness = null;
   }
   db.query = originalQuery;
   db.pool = originalPool;
   tutorApplicationService.ensureTutorApplicationSchema = originalEnsureSchema;
   tutorApplicationService.getEffectiveRoles = originalGetEffectiveRoles;
-  if (originalUploadDirectory === undefined) delete process.env.PRIVATE_UPLOAD_DIR;
-  else process.env.PRIVATE_UPLOAD_DIR = originalUploadDirectory;
+  supabaseSdk.createClient = originalCreateClient;
+  for (const [name, value] of Object.entries(originalStorageEnvironment)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
   if (originalNodeEnvironment === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = originalNodeEnvironment;
   delete require.cache[require.resolve("../middleware/auth")];
@@ -334,7 +387,9 @@ afterEach(async () => {
 test("document operations report unavailable when production has no durable private storage", async () => {
   const harness = await createHarness();
   process.env.NODE_ENV = "production";
-  delete process.env.PRIVATE_UPLOAD_DIR;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SECRET_KEY;
+  delete process.env.SUPABASE_BUCKET;
 
   const applicationRead = await fetch(`${harness.url}/api/tutor-applications/me`, {
     headers: { Authorization: `Bearer ${tokenFor(1)}` }
@@ -381,7 +436,41 @@ test("document operations report unavailable when production has no durable priv
   });
   assert.equal(applicationApproval.status, 503);
   assert.equal(harness.state.application, null);
-  assert.deepEqual(await fs.readdir(harness.directory), []);
+  assert.equal(harness.objectStore.size, 0);
+});
+
+test("incomplete Supabase configuration rejects uploads without storing documents", async () => {
+  const harness = await createHarness();
+  delete process.env.SUPABASE_SECRET_KEY;
+
+  const upload = await postApplication(harness.url, validApplication);
+  assert.equal(upload.response.status, 503);
+  assert.match(upload.data.error, /SUPABASE_SECRET_KEY/);
+  assert.equal(harness.state.application, null);
+  assert.equal(harness.objectStore.size, 0);
+});
+
+test("Supabase storage failures return sanitized errors and never persist metadata", async () => {
+  const harness = await createHarness();
+  harness.state.storageFailure = "upload";
+
+  const upload = await postApplication(harness.url, validApplication);
+  assert.equal(upload.response.status, 500);
+  assert.equal(upload.data.error, "Unable to submit your tutor application.");
+  assert.equal(JSON.stringify(upload.data).includes("private-test-secret-key"), false);
+  assert.equal(harness.state.application, null);
+  assert.equal(harness.state.documents.length, 0);
+
+  harness.state.storageFailure = null;
+  const successfulUpload = await postApplication(harness.url, validApplication);
+  assert.equal(successfulUpload.response.status, 201);
+  harness.state.storageFailure = "signed-url";
+  const failedDownload = await fetch(
+    `${harness.url}/api/tutor-applications/1/documents/registration`,
+    { headers: { Authorization: `Bearer ${tokenFor(2)}` }, redirect: "manual" }
+  );
+  assert.equal(failedDownload.status, 500);
+  assert.equal((await failedDownload.text()).includes("private-test-secret-key"), false);
 });
 
 test("application document validation, review, replacement, private access, and approval gates", async () => {
@@ -422,11 +511,25 @@ test("application document validation, review, replacement, private access, and 
   assert.equal(oversizedFile.response.status, 400);
   assert.equal(harness.state.application, null);
 
+  const oversizedAcademicRecord = await postApplication(harness.url, validApplication, {
+    academicRecord: new Blob([Buffer.alloc(5 * 1024 * 1024 + 1)], { type: "application/pdf" })
+  });
+  assert.equal(oversizedAcademicRecord.response.status, 400);
+  assert.equal(harness.state.application, null);
+
   const submission = await postApplication(harness.url, {
     ...validApplication,
     subjects: ["  CS 101  ", "cs 101", "Data Structures"]
   });
   assert.equal(submission.response.status, 201);
+  assert.deepEqual(
+    harness.state.storageCalls.filter(({ operation }) => operation === "upload")
+      .map(({ contentType, upsert }) => ({ contentType, upsert })),
+    [
+      { contentType: "application/pdf", upsert: false },
+      { contentType: "application/pdf", upsert: false }
+    ]
+  );
   assert.deepEqual(submission.data.application.subjects, ["CS 101", "Data Structures"]);
   assert.equal(submission.data.application.universityName, validApplication.universityName);
   assert.deepEqual(
@@ -436,6 +539,7 @@ test("application document validation, review, replacement, private access, and 
       { type: "academicRecord", status: "PENDING" }
     ]
   );
+  assert.equal("storageKey" in submission.data.application.documents[0], false);
   assert.deepEqual(harness.state.application.subjects, ["CS 101", "Data Structures"]);
 
   const applicantStatus = await fetch(`${harness.url}/api/tutor-applications/me`, {
@@ -450,21 +554,50 @@ test("application document validation, review, replacement, private access, and 
   assert.equal((await adminApplications.json()).applications[0].documents.length, 2);
 
   const document = harness.state.documents.find((item) => item.document_type === "registration");
-  assert.equal((await fs.readFile(path.join(harness.directory, document.storage_key), "utf8")).startsWith("%PDF-"), true);
+  assert.equal(harness.objectStore.get(document.storage_key).toString("utf8").startsWith("%PDF-"), true);
 
+  const signedUrlRequestsBeforeUnauthorizedRequest = harness.state.storageCalls
+    .filter(({ operation }) => operation === "signed-url").length;
   const crossApplicantDownload = await fetch(`${harness.url}/api/tutor-applications/1/documents/registration`, {
-    headers: { Authorization: `Bearer ${tokenFor(3)}` }
+    headers: { Authorization: `Bearer ${tokenFor(3)}` },
+    redirect: "manual"
   });
   assert.equal(crossApplicantDownload.status, 404);
+  assert.equal(
+    harness.state.storageCalls.filter(({ operation }) => operation === "signed-url").length,
+    signedUrlRequestsBeforeUnauthorizedRequest
+  );
   const adminDownload = await fetch(`${harness.url}/api/tutor-applications/1/documents/registration`, {
-    headers: { Authorization: `Bearer ${tokenFor(2)}` }
+    headers: { Authorization: `Bearer ${tokenFor(2)}` },
+    redirect: "manual"
   });
-  assert.equal(adminDownload.status, 200);
-  assert.equal(adminDownload.headers.get("content-disposition").includes("attachment"), true);
+  assert.equal(adminDownload.status, 302);
+  assert.equal(
+    harness.state.storageCalls.filter(({ operation }) => operation === "signed-url").length,
+    signedUrlRequestsBeforeUnauthorizedRequest + 1
+  );
+  assert.match(adminDownload.headers.get("location"), /private-signed-token/);
   assert.equal(adminDownload.headers.get("cache-control"), "private, no-store");
-  assert.equal((await adminDownload.text()).startsWith("%PDF-"), true);
+  const applicantDownload = await fetch(`${harness.url}/api/tutor-applications/1/documents/registration`, {
+    headers: { Authorization: `Bearer ${tokenFor(1)}` },
+    redirect: "manual"
+  });
+  assert.equal(applicantDownload.status, 302);
+  assert.equal(
+    harness.state.storageCalls.filter(({ operation }) => operation === "signed-url").length,
+    signedUrlRequestsBeforeUnauthorizedRequest + 2
+  );
+  const signedUrlCall = harness.state.storageCalls
+    .filter(({ operation }) => operation === "signed-url")
+    .at(-1);
+  assert.equal(signedUrlCall.expiresIn, 300);
+  assert.equal(signedUrlCall.download, "registration.pdf");
   const unauthenticatedDownload = await fetch(`${harness.url}/api/tutor-applications/1/documents/registration`);
   assert.equal(unauthenticatedDownload.status, 401);
+  assert.equal(
+    harness.state.storageCalls.filter(({ operation }) => operation === "signed-url").length,
+    signedUrlRequestsBeforeUnauthorizedRequest + 2
+  );
 
   const nonAdminReview = await reviewDocument(harness.url, "registration", { status: "VERIFIED" }, 3);
   assert.equal(nonAdminReview.status, 403);
@@ -519,7 +652,24 @@ test("application document validation, review, replacement, private access, and 
   const directReverification = await reviewDocument(harness.url, "registration", { status: "VERIFIED" });
   assert.equal(directReverification.status, 409);
 
+  const oversizedReplacementForm = new FormData();
+  oversizedReplacementForm.append(
+    "document",
+    new Blob([Buffer.alloc(5 * 1024 * 1024 + 1)], { type: "application/pdf" }),
+    "oversized-replacement.pdf"
+  );
+  const oversizedReplacement = await fetch(
+    `${harness.url}/api/tutor-applications/me/documents/registration`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${tokenFor(1)}` },
+      body: oversizedReplacementForm
+    }
+  );
+  assert.equal(oversizedReplacement.status, 400);
+
   const replacementForm = new FormData();
+  const replacedStorageKey = document.storage_key;
   replacementForm.append("document", createPdf("new-registration.pdf"), "new-registration.pdf");
   const replacementResponse = await fetch(`${harness.url}/api/tutor-applications/me/documents/registration`, {
     method: "PUT",
@@ -530,6 +680,11 @@ test("application document validation, review, replacement, private access, and 
   const replacement = await replacementResponse.json();
   assert.equal(replacement.document.status, "PENDING");
   assert.equal(replacement.document.rejectionReason, null);
+  assert.equal(harness.objectStore.has(replacedStorageKey), false);
+  assert.equal(
+    harness.state.storageCalls.some(({ operation, keys }) => operation === "delete" && keys.includes(replacedStorageKey)),
+    true
+  );
 
   const verifyRegistration = await reviewDocument(harness.url, "registration", { status: "VERIFIED" });
   assert.equal(verifyRegistration.status, 200);
@@ -559,10 +714,10 @@ test("application document validation, review, replacement, private access, and 
   const restartedAddress = harness.server.address();
   const persistedDownload = await fetch(
     `http://127.0.0.1:${restartedAddress.port}/api/tutor-applications/1/documents/registration`,
-    { headers: { Authorization: `Bearer ${tokenFor(2)}` } }
+    { headers: { Authorization: `Bearer ${tokenFor(2)}` }, redirect: "manual" }
   );
-  assert.equal(persistedDownload.status, 200);
-  assert.equal((await persistedDownload.text()).startsWith("%PDF-"), true);
+  assert.equal(persistedDownload.status, 302);
+  assert.match(persistedDownload.headers.get("location"), /private-signed-token/);
 });
 
 test("valid JPEG registration and PNG academic record files are accepted", async () => {

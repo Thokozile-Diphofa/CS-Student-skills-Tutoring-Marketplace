@@ -1,8 +1,7 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const {
-  ensurePrivateUploadDirectory,
-  getPrivateUploadDirectory
+  hasPrivateDocumentStorageConfiguration
 } = require("../services/privateDocuments");
 const { initializeWithRetry } = require("../services/startupInitialization");
 
@@ -60,19 +59,26 @@ test("startup does not retry a schema or configuration error", async () => {
   assert.equal(delayCount, 0);
 });
 
-test("production startup can proceed without configuring document storage", async () => {
+test("production startup can proceed without configuring Supabase document storage", async () => {
   const originalNodeEnvironment = process.env.NODE_ENV;
-  const originalUploadDirectory = process.env.PRIVATE_UPLOAD_DIR;
+  const originalStorageEnvironment = {
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
+    SUPABASE_BUCKET: process.env.SUPABASE_BUCKET
+  };
   process.env.NODE_ENV = "production";
-  delete process.env.PRIVATE_UPLOAD_DIR;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SECRET_KEY;
+  delete process.env.SUPABASE_BUCKET;
 
   try {
-    assert.equal(getPrivateUploadDirectory(), null);
-    assert.equal(await ensurePrivateUploadDirectory(), null);
+    assert.equal(hasPrivateDocumentStorageConfiguration(), false);
   } finally {
     if (originalNodeEnvironment === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = originalNodeEnvironment;
-    if (originalUploadDirectory === undefined) delete process.env.PRIVATE_UPLOAD_DIR;
-    else process.env.PRIVATE_UPLOAD_DIR = originalUploadDirectory;
+    for (const [name, value] of Object.entries(originalStorageEnvironment)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   }
 });
