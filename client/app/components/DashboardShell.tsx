@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -26,23 +26,31 @@ const navigationByRole = {
     { label: "Dashboard", href: "/dashboard/student" },
     { label: "Find Tutors", href: "/tutors" },
     { label: "My Session Requests", href: "#requests" },
-    { label: "Profile", href: "#profile" }
+    { label: "Profile", href: "#profile" },
+    { label: "Report a Problem", href: "/report-problem" },
+    { label: "My Reports", href: "/my-reports" }
   ],
   TUTOR: [
     { label: "Dashboard", href: "/dashboard/tutor" },
     { label: "Tutor Profile", href: "#profile" },
-    { label: "Tutor Requests", href: "#requests" }
+    { label: "Tutor Requests", href: "#requests" },
+    { label: "Report a Problem", href: "/report-problem" },
+    { label: "My Reports", href: "/my-reports" }
   ],
   ADMIN: [
     { label: "Dashboard", href: "#overview-heading" },
     { label: "Tutor Applications", href: "#applications-heading" },
+    { label: "Reports", href: "#reports-heading" },
     { label: "Users", href: "#users-heading" },
-    { label: "Approved Tutors", href: "#tutors-heading" }
+    { label: "Approved Tutors", href: "#tutors-heading" },
+    { label: "Report a Problem", href: "/report-problem" },
+    { label: "My Reports", href: "/my-reports" }
   ]
 } satisfies Record<DashboardRole, { label: string; href: string }[]>;
 
 export default function DashboardShell({ role, activeItem, user, children }: DashboardShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -108,7 +116,7 @@ export default function DashboardShell({ role, activeItem, user, children }: Das
           {navigationByRole[role].map((item) => (
             <Link
               key={item.label}
-              href={item.href}
+              href={item.href.startsWith("#") && pathname !== dashboardHref ? `${dashboardHref}${item.href}` : item.href}
               aria-current={activeItem === item.label ? "page" : undefined}
               onClick={() => setMobileMenuOpen(false)}
               className={`block rounded-lg px-3 py-2.5 text-sm transition ${

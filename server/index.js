@@ -10,7 +10,9 @@ const tutorRoutes = require("./routes/tutors");
 const tutorApplicationRoutes = require("./routes/tutorApplications");
 const sessionRequestRoutes = require("./routes/sessionRequests");
 const paymentRoutes = require("./routes/payments");
+const reportRoutes = require("./routes/reports");
 const { ensureTutorApplicationSchema } = require("./services/tutorApplications");
+const { ensureReportSchema } = require("./services/reports");
 const { hasPrivateDocumentStorageConfiguration } = require("./services/privateDocuments");
 const { initializeWithRetry } = require("./services/startupInitialization");
 
@@ -56,6 +58,7 @@ app.use("/api/tutor-applications", tutorApplicationRoutes);
 app.use("/api/tutors", tutorRoutes);
 app.use("/api/session-requests", sessionRequestRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/reports", reportRoutes);
 
 // Test routes
 app.get("/", (req, res) => {
@@ -76,14 +79,15 @@ app.use(handleCorsError);
 initializeWithRetry(async () => {
   await authRoutes.initializeSchema();
   await ensureTutorApplicationSchema();
+  await ensureReportSchema();
   if (!hasPrivateDocumentStorageConfiguration()) {
-    console.warn("Private tutor document storage is not configured; document uploads and downloads are unavailable.");
+    console.warn("Private document storage is not configured; tutor and report attachments are unavailable.");
   }
 })
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
   .catch((error) => {
-    console.error("Failed to initialize authentication schema:", getErrorDetails(error));
+    console.error("Failed to initialize API schemas:", getErrorDetails(error));
     process.exit(1);
   });
