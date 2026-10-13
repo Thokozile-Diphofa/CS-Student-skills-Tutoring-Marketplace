@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import DashboardShell from "../../components/DashboardShell";
+import { getTutorApplicationStatusLabel } from "../../lib/dashboardRouting";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -30,6 +31,12 @@ interface SessionRequest {
   currency: string | null;
 }
 
+interface TutorApplicationStatus {
+  status: string | null;
+  submittedAt: string | null;
+  rejectionReason: string | null;
+}
+
 interface OverviewMetricProps {
   label: string;
   value: string | number;
@@ -46,6 +53,13 @@ function OverviewMetric({ label, value, detail }: OverviewMetricProps) {
   );
 }
 
+function formatApplicationDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Date unavailable"
+    : new Intl.DateTimeFormat("en-ZA", { dateStyle: "medium" }).format(date);
+}
+
 export default function StudentDashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -56,6 +70,9 @@ export default function StudentDashboardPage() {
   const [sessionRequests, setSessionRequests] = useState<SessionRequest[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState("");
+  const [tutorApplication, setTutorApplication] = useState<TutorApplicationStatus | null>(null);
+  const [tutorApplicationLoading, setTutorApplicationLoading] = useState(true);
+  const [tutorApplicationError, setTutorApplicationError] = useState("");
   const [payingSessionId, setPayingSessionId] = useState<number | null>(null);
   const [paymentError, setPaymentError] = useState("");
   const [profileForm, setProfileForm] = useState({
@@ -112,6 +129,33 @@ export default function StudentDashboardPage() {
 
         if (cancelled || !authenticatedUser) return;
         setUser(authenticatedUser);
+
+        try {
+          const applicationResponse = await fetch(`${API_BASE_URL}/api/tutor-applications/me`, {
+            credentials: "include"
+          });
+          if (!applicationResponse.ok) throw new Error("Tutor application status could not be loaded.");
+          const applicationData = await applicationResponse.json();
+          const application = applicationData.application;
+          if (!cancelled) {
+            setTutorApplication(
+              application && application.submittedAt
+                ? {
+                  status: typeof application.status === "string" ? application.status : null,
+                  submittedAt: application.submittedAt,
+                  rejectionReason: typeof application.rejectionReason === "string"
+                    ? application.rejectionReason
+                    : null
+                }
+                : null
+            );
+          }
+        } catch (error) {
+          console.error("Tutor application status request failed:", error);
+          if (!cancelled) setTutorApplicationError("Your tutor application status could not be loaded. Refresh to try again.");
+        } finally {
+          if (!cancelled) setTutorApplicationLoading(false);
+        }
 
         try {
           const tutorResponse = await fetch(`${API_BASE_URL}/api/tutors`, {
@@ -275,6 +319,53 @@ export default function StudentDashboardPage() {
           detail={sessionsError || "Requests accepted by tutors."}
         />
       </div>
+
+      <section className="mt-7 rounded-xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm">
+        <h2 className="text-lg font-bold text-[#241B3B]">Tutor application</h2>
+        {tutorApplicationLoading ? (
+          <p className="mt-2 text-sm text-[#625B71]" role="status">Loading your application status...</p>
+        ) : tutorApplicationError ? (
+          <p className="mt-2 text-sm text-[#EF4444]" role="alert">{tutorApplicationError}</p>
+        ) : tutorApplication ? (
+          <>
+            <p className="mt-2 text-sm text-[#625B71]">
+              Status:{" "}
+              <span className="font-semibold text-[#241B3B]">
+                {getTutorApplicationStatusLabel(tutorApplication.status) || "Status unavailable"}
+              </span>
+            </p>
+            {tutorApplication.submittedAt && (
+              <p className="mt-1 text-sm text-[#625B71]">
+                Submitted {formatApplicationDate(tutorApplication.submittedAt)}
+              </p>
+            )}
+            {tutorApplication.status === "PENDING" && (
+              <p className="mt-2 text-sm text-[#625B71]">Your application is awaiting administrator review.</p>
+            )}
+            {tutorApplication.status === "APPROVED" || tutorApplication.status === "ACCEPTED" ? (
+              <p className="mt-2 text-sm font-medium text-[#15803D]">Your tutor application has been approved.</p>
+            ) : null}
+            {tutorApplication.status === "REJECTED" && (
+              <div className="mt-2 space-y-1 text-sm text-[#625B71]">
+                <p>Your application was rejected.</p>
+                {tutorApplication.rejectionReason && (
+                  <p>Reason: <span className="font-medium text-[#241B3B]">{tutorApplication.rejectionReason}</span></p>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-[#625B71]">You have not submitted a tutor application.</p>
+            <Link
+              href="/become-a-tutor"
+              className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#6C4CF1] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5B3FD2]"
+            >
+              Become a Tutor
+            </Link>
+          </div>
+        )}
+      </section>
 
       <section className="mt-7 flex flex-col gap-5 rounded-xl border border-[#CFC4F8] bg-white/80 p-6 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
         <div>

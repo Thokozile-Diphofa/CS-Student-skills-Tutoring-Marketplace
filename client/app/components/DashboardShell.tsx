@@ -44,6 +44,7 @@ const navigationByRole = {
 export default function DashboardShell({ role, activeItem, user, children }: DashboardShellProps) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const switchRole = role === "TUTOR" ? "STUDENT" : role === "STUDENT" ? "TUTOR" : null;
   const canSwitchDashboard = switchRole !== null && user.roles.includes(switchRole);
@@ -60,20 +61,22 @@ export default function DashboardShell({ role, activeItem, user, children }: Das
 
   async function handleLogout() {
     setLoggingOut(true);
+    setLogoutError("");
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
         method: "POST",
         credentials: "include"
       });
-      if (!response.ok) console.error("Logout request failed.");
+      if (!response.ok) throw new Error("Logout request failed.");
+
+      ["user_roles", "user_email", "user_name"].forEach((key) => localStorage.removeItem(key));
+      router.replace("/");
+      router.refresh();
     } catch (error) {
       console.error("Logout request error:", error);
-    } finally {
-      ["user_roles", "user_email", "user_name"].forEach((key) => localStorage.removeItem(key));
-      router.replace(role === "ADMIN" ? "/admin/login" : "/login");
-      router.refresh();
-      setLoggingOut(false);
+      setLogoutError("Logout failed. Please try again.");
     }
+    setLoggingOut(false);
   }
 
   function renderSidebarContent(isMobile = false) {
@@ -137,6 +140,7 @@ export default function DashboardShell({ role, activeItem, user, children }: Das
           >
             {loggingOut ? "Logging out..." : "Logout"}
           </button>
+          {logoutError && <p role="alert" className="text-xs text-[#FCA5A5]">{logoutError}</p>}
         </div>
       </>
     );

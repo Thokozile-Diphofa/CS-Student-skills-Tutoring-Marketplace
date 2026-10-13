@@ -473,6 +473,39 @@ test("Supabase storage failures return sanitized errors and never persist metada
   assert.equal((await failedDownload.text()).includes("private-test-secret-key"), false);
 });
 
+test("administrator rejection is persisted and visible only to the applicant", async () => {
+  const harness = await createHarness();
+  const submission = await postApplication(harness.url, validApplication);
+  assert.equal(submission.response.status, 201);
+
+  const rejection = await fetch(`${harness.url}/api/tutor-applications/1/review`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${tokenFor(2)}`
+    },
+    body: JSON.stringify({
+      status: "REJECTED",
+      rejectionReason: "Please upload current academic records."
+    })
+  });
+  assert.equal(rejection.status, 200);
+  assert.equal(harness.state.application.status, "REJECTED");
+  assert.equal(harness.state.application.rejection_reason, "Please upload current academic records.");
+
+  const applicantResponse = await fetch(`${harness.url}/api/tutor-applications/me`, {
+    headers: { Authorization: `Bearer ${tokenFor(1)}` }
+  });
+  const applicantData = await applicantResponse.json();
+  assert.equal(applicantData.application.status, "REJECTED");
+  assert.equal(applicantData.application.rejectionReason, "Please upload current academic records.");
+
+  const otherStudentResponse = await fetch(`${harness.url}/api/tutor-applications/me`, {
+    headers: { Authorization: `Bearer ${tokenFor(3)}` }
+  });
+  assert.deepEqual(await otherStudentResponse.json(), { application: null });
+});
+
 test("application document validation, review, replacement, private access, and approval gates", async () => {
   const harness = await createHarness();
   const invalidSubjects = [
@@ -532,6 +565,8 @@ test("application document validation, review, replacement, private access, and 
   );
   assert.deepEqual(submission.data.application.subjects, ["CS 101", "Data Structures"]);
   assert.equal(submission.data.application.universityName, validApplication.universityName);
+  assert.equal(submission.data.application.status, "PENDING");
+  assert.ok(submission.data.application.submittedAt);
   assert.deepEqual(
     submission.data.application.documents.map(({ type, status }) => ({ type, status })),
     [
@@ -547,6 +582,17 @@ test("application document validation, review, replacement, private access, and 
   });
   assert.equal(applicantStatus.status, 200);
   assert.equal((await applicantStatus.json()).application.documents.length, 2);
+  const ownApplication = await fetch(`${harness.url}/api/tutor-applications/me`, {
+    headers: { Authorization: `Bearer ${tokenFor(1)}` }
+  });
+  const ownApplicationData = await ownApplication.json();
+  assert.equal(ownApplication.status, 200);
+  assert.equal(ownApplicationData.application.status, "PENDING");
+  assert.equal(ownApplicationData.application.submittedAt, submission.data.application.submittedAt);
+  const anotherStudentsApplication = await fetch(`${harness.url}/api/tutor-applications/me`, {
+    headers: { Authorization: `Bearer ${tokenFor(3)}` }
+  });
+  assert.deepEqual(await anotherStudentsApplication.json(), { application: null });
   const adminApplications = await fetch(`${harness.url}/api/tutor-applications`, {
     headers: { Authorization: `Bearer ${tokenFor(2)}` }
   });
@@ -638,6 +684,11 @@ test("application document validation, review, replacement, private access, and 
   });
   assert.equal(rejected.status, 200);
   assert.equal((await rejected.json()).document.status, "REJECTED");
+  const rejectedApplication = await fetch(`${harness.url}/api/tutor-applications/me`, {
+    headers: { Authorization: `Bearer ${tokenFor(1)}` }
+  });
+  const rejectedApplicationData = await rejectedApplication.json();
+  assert.equal(rejectedApplicationData.application.status, "PENDING");
 
   const rejectedApproval = await fetch(`${harness.url}/api/tutor-applications/1/review`, {
     method: "PATCH",
@@ -701,6 +752,10 @@ test("application document validation, review, replacement, private access, and 
   });
   assert.equal(approved.status, 200);
   assert.equal(harness.state.application.status, "APPROVED");
+  const approvedApplication = await fetch(`${harness.url}/api/tutor-applications/me`, {
+    headers: { Authorization: `Bearer ${tokenFor(1)}` }
+  });
+  assert.equal((await approvedApplication.json()).application.status, "APPROVED");
   assert.equal(harness.state.roles[1].includes("TUTOR"), true);
   assert.deepEqual(harness.state.tutorSkills, ["CS 101", "Data Structures"]);
 
