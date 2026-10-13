@@ -48,18 +48,19 @@ the corresponding schema for new database installations.
 
 ### Frontend/API connection in production
 
-Set `NEXT_PUBLIC_API_URL` in the Vercel frontend environment to the public Render API
-origin, for example `https://your-api.onrender.com` (without an `/api` path). On the Render
-service, set `CLIENT_URL` to the exact public frontend origin, including its scheme, such as
-`https://your-app.vercel.app`. This remains the primary allowed CORS origin and is also used
-for payment links.
+Set the Vercel frontend environment variable `NEXT_PUBLIC_API_URL` to
+`https://cs-student-skills-tutoring-marketplace.onrender.com` (the API origin, without an
+`/api` path). On the Render API service, set `CLIENT_URL` to the canonical public frontend
+origin. This remains the primary allowed CORS origin and is also used for payment links.
 
-If the API must accept requests from additional known frontend origins, set
-`CORS_ALLOWED_ORIGINS` on Render to a comma-separated list of exact origins. Do not include
-paths or use `*`; credentialed browser requests require an explicit origin allowlist. Local
-development origins are allowed only when `NODE_ENV` is not `production`. Redeploy the
-frontend after changing `NEXT_PUBLIC_API_URL` and restart/redeploy the API after changing
-its CORS settings.
+For the deployed frontend at
+`https://cs-student-skills-tutoring-marketplace-ljq2neizb.vercel.app`, include that exact
+origin in Render's comma-separated `CORS_ALLOWED_ORIGINS` setting. Preserve any existing
+entries in that setting. Do not include paths or use `*`; credentialed browser requests
+require an explicit origin allowlist. Local development origins are allowed only when
+`NODE_ENV` is not `production`. Redeploy the frontend after changing `NEXT_PUBLIC_API_URL`
+and restart/redeploy the API after changing its CORS settings. Verify the deployed API's
+credentialed `OPTIONS` preflight and `/api/auth/me` response after redeployment.
 
 ### Manual verification steps
 
