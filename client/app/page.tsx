@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import { getHomeRouteDecision } from "./lib/dashboardRouting";
 
 const steps = [
   {
@@ -18,6 +23,60 @@ const steps = [
 ];
 
 export default function Home() {
+  const router = useRouter();
+  const [accessState, setAccessState] = useState<"checking" | "public" | "error">("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkAuthentication() {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/me`, {
+          credentials: "include"
+        });
+        const data = response.ok ? await response.json() : null;
+        if (cancelled) return;
+        const decision = getHomeRouteDecision(response.status, data?.user?.roles);
+        if (decision.kind === "public") {
+          if (!cancelled) setAccessState("public");
+          return;
+        }
+        if (decision.kind === "error") throw new Error("Unable to verify your account.");
+        router.replace(decision.href);
+      } catch {
+        if (!cancelled) setAccessState("error");
+      }
+    }
+
+    void checkAuthentication();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  if (accessState !== "public") {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] px-6 text-center text-[#625B71]">
+        <div>
+          <p role={accessState === "error" ? "alert" : "status"} className="text-sm font-medium">
+            {accessState === "error"
+              ? "We could not verify your account. Please try again."
+              : "Checking your account..."}
+          </p>
+          {accessState === "error" && (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-4 rounded-lg bg-[#6C4CF1] px-4 py-2 text-sm font-semibold text-white"
+            >
+              Try again
+            </button>
+          )}
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F3EEFF] to-[#FFF0E8] text-[#241B3B]">
       <Navbar />

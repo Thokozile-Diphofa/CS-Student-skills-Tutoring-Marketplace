@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { getDashboardPath } from "../lib/dashboardRouting";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 const AUTH_METADATA_KEYS = ["user_roles", "user_email", "user_name"];
@@ -125,25 +126,21 @@ export default function Navbar() {
   if (authStatus === "signed-in") {
     if (roles.includes("ADMIN")) {
       navigation = [
-        { label: "Home", href: "/" },
         { label: "Admin Dashboard", href: "/dashboard/admin" }
       ];
     } else if (roles.includes("TUTOR")) {
       navigation = [
-        { label: "Home", href: "/" },
         { label: "Find Tutors", href: "/tutors" },
         { label: "Tutor Dashboard", href: "/dashboard/tutor" }
       ];
     } else if (roles.includes("STUDENT") && applicationStatus === "PENDING") {
       navigation = [
-        { label: "Home", href: "/" },
         { label: "Find Tutors", href: "/tutors" },
         { label: "Tutor Application", href: "/tutor/application" },
         { label: "Student Dashboard", href: "/dashboard/student" }
       ];
     } else {
       navigation = [
-        { label: "Home", href: "/" },
         { label: "Find Tutors", href: "/tutors" },
         { label: "Become a Tutor", href: "/become-a-tutor" },
         { label: "Student Dashboard", href: "/dashboard/student" }
@@ -154,7 +151,10 @@ export default function Navbar() {
   return (
     <header className="border-b border-[#6C4CF1]/30 bg-[#241B3B] text-white shadow-md">
       <nav aria-label="Main navigation" className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-5 gap-y-3 px-5 py-4 sm:px-8">
-        <Link href="/" className="flex items-center gap-3">
+        <Link
+          href={authStatus === "signed-in" ? getDashboardPath(roles) || "/" : "/"}
+          className="flex items-center gap-3"
+        >
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FFD166] text-lg font-black text-[#241B3B] shadow-sm">E</span>
           <span className="text-xl font-bold tracking-tight text-white">EasyLearning</span>
         </Link>
