@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const AUTH_METADATA_KEYS = ["user_roles", "user_email", "user_name"];
+const RECOGNIZED_ROLES = new Set(["STUDENT", "TUTOR", "ADMIN"]);
+
+function clearClientAuthMetadata() {
+  AUTH_METADATA_KEYS.forEach((key) => localStorage.removeItem(key));
+}
 
 type NavigationItem = {
   label: string;
@@ -35,12 +41,35 @@ export default function Navbar() {
       try {
         const response = await fetch(`${API_BASE_URL}/api/auth/me`, { credentials: "include" });
         if (!response.ok) {
-          if (!cancelled) setAuthStatus("signed-out");
+          if (!cancelled) {
+            clearClientAuthMetadata();
+            setRoles([]);
+            setApplicationStatus(null);
+            setAuthStatus("signed-out");
+          }
           return;
         }
 
         const data = await response.json();
-        const userRoles: string[] = Array.isArray(data.user?.roles) ? data.user.roles : [];
+        const userRoles = Array.isArray(data.user?.roles)
+          ? data.user.roles.filter((role: unknown): role is string =>
+            typeof role === "string" && RECOGNIZED_ROLES.has(role))
+          : [];
+        if (
+          !data.user
+          || typeof data.user !== "object"
+          || data.user.id === undefined
+          || data.user.id === null
+          || userRoles.length === 0
+        ) {
+          if (!cancelled) {
+            clearClientAuthMetadata();
+            setRoles([]);
+            setApplicationStatus(null);
+            setAuthStatus("signed-out");
+          }
+          return;
+        }
         if (cancelled) return;
         setRoles(userRoles);
         setAuthStatus("signed-in");
@@ -54,7 +83,12 @@ export default function Navbar() {
           setApplicationStatus(applicationData.application.status || null);
         }
       } catch {
-        if (!cancelled) setAuthStatus("signed-out");
+        if (!cancelled) {
+          clearClientAuthMetadata();
+          setRoles([]);
+          setApplicationStatus(null);
+          setAuthStatus("signed-out");
+        }
       }
     }
 
@@ -74,7 +108,7 @@ export default function Navbar() {
       });
       if (!response.ok) throw new Error("Logout request failed.");
 
-      ["user_roles", "user_email", "user_name"].forEach((key) => localStorage.removeItem(key));
+      clearClientAuthMetadata();
       setRoles([]);
       setAuthStatus("signed-out");
       setApplicationStatus(null);
