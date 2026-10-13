@@ -58,7 +58,7 @@ export default function LoginPage() {
 
     } catch (err) {
       console.error("Login network error:", err);
-      setErrorMessage(`Unable to connect to backend server at ${API_BASE_URL}. Please ensure the Express server is running ('npm start' in server folder).`);
+      setErrorMessage("The browser could not complete the connection to the login service. Check your network connection, confirm this website's origin is allowed by the API's CORS configuration, and verify NEXT_PUBLIC_API_URL points to the API. If the issue persists, check the API service logs.");
       setLoading(false);
       return;
     }

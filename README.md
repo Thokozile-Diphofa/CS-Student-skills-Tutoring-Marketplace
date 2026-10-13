@@ -54,10 +54,10 @@ Set the Vercel frontend environment variable `NEXT_PUBLIC_API_URL` to
 origin. This remains the primary allowed CORS origin and is also used for payment links.
 
 For the deployed frontend at
-`https://cs-student-skills-tutoring-marketplace-ljq2neizb.vercel.app`, include that exact
-origin in Render's comma-separated `CORS_ALLOWED_ORIGINS` setting. Preserve any existing
-entries in that setting. Do not include paths or use `*`; credentialed browser requests
-require an explicit origin allowlist. Local development origins are allowed only when
+`https://cs-student-skills-tutoring-marketpl.vercel.app`, include that exact origin in
+Render's comma-separated `CORS_ALLOWED_ORIGINS` setting. Preserve any existing entries
+in that setting. Do not include paths or use `*`; credentialed browser requests require
+an explicit origin allowlist. Local development origins are allowed only when
 `NODE_ENV` is not `production`. Redeploy the frontend after changing `NEXT_PUBLIC_API_URL`
 and restart/redeploy the API after changing its CORS settings. Verify the deployed API's
 credentialed `OPTIONS` preflight and `/api/auth/me` response after redeployment.

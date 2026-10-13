@@ -56,7 +56,7 @@ test("credentialed CORS allows CLIENT_URL and explicitly configured additional o
 });
 
 test("production login preflight allows the deployed Vercel origin with credentials", async () => {
-  const origin = "https://cs-student-skills-tutoring-marketplace-ljq2neizb.vercel.app";
+  const origin = "https://cs-student-skills-tutoring-marketpl.vercel.app";
   const response = await requestWithOrigin({
     NODE_ENV: "production",
     CLIENT_URL: "https://market.example.test",
