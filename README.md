@@ -28,19 +28,29 @@ which returns to `PENDING`.
 - `PATCH /api/tutor-applications/:id/review` — administrator-only overall application
   decision; approval requires both required documents to be currently verified.
 
-### Private document storage on Render
+### Private tutor application document storage
 
-Uploaded documents are stored as private files; PostgreSQL stores only file references and
-metadata. No upload directory is served as static content. For production, provision a
-Render persistent disk for the Express service and set `PRIVATE_UPLOAD_DIR` to its absolute
-mount path (for example, `/var/data/private-documents`). The disk must be provisioned and
-may incur Render charges. Without `PRIVATE_UPLOAD_DIR`, the API still starts and
-authentication, tutor profiles, and application metadata remain available, but document
-uploads, replacements, downloads, document review, and application approval return a
-service-unavailable response. It never falls back to ephemeral local storage in production.
-For local development, the backend uses `server/private-documents/`, which is git-ignored.
-Setting `PRIVATE_UPLOAD_DIR` alone does not prove that storage is durable: the operator
-must point it to a provisioned persistent mount with private access controls.
+Tutor application documents are stored in a private Supabase Storage bucket;
+PostgreSQL stores only opaque object keys and file metadata. The API uses the Supabase
+secret key exclusively on the backend. It creates a five-minute signed download URL only
+after verifying that the requester is the applicant or an authorized administrator, then
+redirects to that URL. The bucket is never made public, and file contents are not stored
+in PostgreSQL or on the Render filesystem.
+
+Create a private Supabase Storage bucket named `tutor-documents` (do not enable public
+access). In the Render API service settings, configure:
+
+- `SUPABASE_URL` — the Supabase project URL.
+- `SUPABASE_SECRET_KEY` — the project's secret key; keep it server-side and secret.
+- `SUPABASE_BUCKET` — `tutor-documents`.
+
+Restart or redeploy the API after setting these values. Never put the Supabase secret key
+in frontend environment variables, source code, Git, logs, or client-visible responses.
+Without all three values, the API still starts and unrelated features remain available,
+but document upload, replacement, downloads, review, and application approval fail with
+HTTP 503. Local tests mock Supabase and require no real credentials or uploads. Do not
+consider production storage operational until configuration is complete and an authorized
+upload and download have been verified end to end.
 
 The PostgreSQL schema initializer applies additive, idempotent changes for application
 university snapshots and document verification records. `server/schema.sql` also contains

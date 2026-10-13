@@ -11,7 +11,7 @@ const tutorApplicationRoutes = require("./routes/tutorApplications");
 const sessionRequestRoutes = require("./routes/sessionRequests");
 const paymentRoutes = require("./routes/payments");
 const { ensureTutorApplicationSchema } = require("./services/tutorApplications");
-const { ensurePrivateUploadDirectory } = require("./services/privateDocuments");
+const { hasPrivateDocumentStorageConfiguration } = require("./services/privateDocuments");
 const { initializeWithRetry } = require("./services/startupInitialization");
 
 const app = express();
@@ -76,8 +76,7 @@ app.use(handleCorsError);
 initializeWithRetry(async () => {
   await authRoutes.initializeSchema();
   await ensureTutorApplicationSchema();
-  const privateUploadDirectory = await ensurePrivateUploadDirectory();
-  if (!privateUploadDirectory) {
+  if (!hasPrivateDocumentStorageConfiguration()) {
     console.warn("Private tutor document storage is not configured; document uploads and downloads are unavailable.");
   }
 })

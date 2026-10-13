@@ -1,58 +1,83 @@
-const fs = require("node:fs");
-const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const multer = require("multer");
+const supabaseSdk = require("@supabase/supabase-js");
 
 const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+const SIGNED_URL_EXPIRY_SECONDS = 5 * 60;
 const MIME_BY_EXTENSION = {
   ".pdf": "application/pdf",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png"
 };
-const DEFAULT_UPLOAD_DIRECTORY = path.join(__dirname, "..", "private-documents");
-const CLIENT_DIRECTORY = path.resolve(__dirname, "..", "..", "client");
+const DOCUMENT_STORAGE_ERROR =
+  "Private document storage is unavailable. Configure durable private storage with SUPABASE_URL, SUPABASE_SECRET_KEY, and SUPABASE_BUCKET before processing application documents.";
 
-function isInsideDirectory(parent, child) {
-  const relativePath = path.relative(parent, child);
-  return relativePath === ""
-    || (!relativePath.startsWith(`..${path.sep}`) && relativePath !== ".." && !path.isAbsolute(relativePath));
+let supabaseClient;
+let supabaseClientConfiguration;
+
+function getStorageConfiguration() {
+  const { SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_BUCKET } = process.env;
+  if (!SUPABASE_URL?.trim() || !SUPABASE_SECRET_KEY?.trim() || !SUPABASE_BUCKET?.trim()) {
+    const error = new Error(DOCUMENT_STORAGE_ERROR);
+    error.statusCode = 503;
+    throw error;
+  }
+  return {
+    url: SUPABASE_URL.trim(),
+    secretKey: SUPABASE_SECRET_KEY.trim(),
+    bucket: SUPABASE_BUCKET.trim()
+  };
 }
 
-function getPrivateUploadDirectory() {
-  const configuredDirectory = process.env.PRIVATE_UPLOAD_DIR;
-  if (process.env.NODE_ENV === "production" && !configuredDirectory) {
-    return null;
+function hasPrivateDocumentStorageConfiguration() {
+  try {
+    getStorageConfiguration();
+    return true;
+  } catch (error) {
+    if (error.statusCode === 503) return false;
+    throw error;
   }
-  if (configuredDirectory && process.env.NODE_ENV === "production" && !path.isAbsolute(configuredDirectory)) {
-    throw new Error("PRIVATE_UPLOAD_DIR must be an absolute path in production.");
-  }
-  const directory = path.resolve(configuredDirectory || DEFAULT_UPLOAD_DIRECTORY);
-  if (isInsideDirectory(CLIENT_DIRECTORY, directory)) {
-    throw new Error("PRIVATE_UPLOAD_DIR must not be inside the frontend directory.");
-  }
-  if (process.env.NODE_ENV === "production") {
-    const repositoryDirectory = path.resolve(__dirname, "..", "..");
-    if (isInsideDirectory(repositoryDirectory, directory)) {
-      throw new Error("PRIVATE_UPLOAD_DIR must be outside the deployed source directory.");
-    }
-  }
-  return directory;
 }
 
-async function ensurePrivateUploadDirectory() {
-  const directory = getPrivateUploadDirectory();
-  if (!directory) return null;
-  await fs.promises.mkdir(directory, { recursive: true, mode: 0o700 });
-  if (process.platform !== "win32") await fs.promises.chmod(directory, 0o700);
-  return directory;
+function getSupabaseClient(configuration) {
+  if (
+    !supabaseClient
+    || supabaseClientConfiguration.url !== configuration.url
+    || supabaseClientConfiguration.secretKey !== configuration.secretKey
+  ) {
+    supabaseClient = supabaseSdk.createClient(configuration.url, configuration.secretKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+    supabaseClientConfiguration = configuration;
+  }
+  return supabaseClient;
+}
+
+function createStorageOperationError(operation) {
+  const error = new Error("Private document storage operation failed.");
+  error.storageOperation = operation;
+  error.statusCode = 500;
+  return error;
+}
+
+async function performStorageOperation(operation, callback) {
+  try {
+    const { data, error } = await callback();
+    if (error) throw createStorageOperationError(operation);
+    return data;
+  } catch (error) {
+    if (error.storageOperation === operation) throw error;
+    throw createStorageOperationError(operation);
+  }
 }
 
 function requirePrivateDocumentStorage(req, res, next) {
-  if (!getPrivateUploadDirectory()) {
-    return res.status(503).json({
-      error: "Private document storage is unavailable. Configure durable private storage before processing application documents."
-    });
+  if (!hasPrivateDocumentStorageConfiguration()) {
+    return res.status(503).json({ error: DOCUMENT_STORAGE_ERROR });
   }
   next();
 }
@@ -64,30 +89,9 @@ function requirePrivateStorageForApproval(req, res, next) {
   next();
 }
 
-const storage = multer.diskStorage({
-  destination(req, file, callback) {
-    ensurePrivateUploadDirectory().then(
-      (directory) => {
-        if (!directory) {
-          const error = new Error("Private document storage is unavailable.");
-          error.statusCode = 503;
-          callback(error);
-          return;
-        }
-        callback(null, directory);
-      },
-      (error) => callback(error)
-    );
-  },
-  filename(req, file, callback) {
-    const extension = path.extname(file.originalname).toLowerCase();
-    callback(null, `${randomUUID()}${extension}`);
-  }
-});
-
 function validateDeclaredFile(file, callback) {
-  const extension = path.extname(file.originalname).toLowerCase();
-  const expectedMimeType = MIME_BY_EXTENSION[extension];
+  const extension = file.originalname.split(/[\\/]/).pop().toLowerCase();
+  const expectedMimeType = MIME_BY_EXTENSION[extension.slice(extension.lastIndexOf("."))];
   if (!expectedMimeType || file.mimetype !== expectedMimeType) {
     const error = new Error("Upload a PDF, JPG, JPEG, or PNG file with a matching file type.");
     error.statusCode = 415;
@@ -98,7 +102,7 @@ function validateDeclaredFile(file, callback) {
 }
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: MAX_DOCUMENT_BYTES,
     files: 2,
@@ -109,29 +113,22 @@ const upload = multer({
   fileFilter: (req, file, callback) => validateDeclaredFile(file, callback)
 });
 
+function respondToUploadError(error, res, message) {
+  const status = error instanceof multer.MulterError ? 400 : error.statusCode || 500;
+  res.status(status).json({
+    error: error.code === "LIMIT_FILE_SIZE"
+      ? message
+      : error.message || "Unable to process uploaded documents."
+  });
+}
+
 function parseApplicationDocuments(req, res, next) {
   upload.fields([
     { name: "registration", maxCount: 1 },
     { name: "academicRecord", maxCount: 1 }
   ])(req, res, (error) => {
-    if (!error) {
-      Promise.all(getRequestFiles(req).map((file) => fs.promises.chmod(file.path, 0o600)))
-        .then(() => next())
-      .catch(async (chmodError) => {
-        await removeUploadedFiles(getRequestFiles(req));
-        console.error("Unable to secure tutor application document permissions:", chmodError);
-        res.status(500).json({ error: "Unable to securely store the uploaded documents." });
-      });
-    return;
-    }
-    removeUploadedFiles(getRequestFiles(req)).finally(() => {
-    const status = error instanceof multer.MulterError ? 400 : error.statusCode || 500;
-      res.status(status).json({
-        error: error.code === "LIMIT_FILE_SIZE"
-          ? "Each document must be 5 MB or smaller."
-          : error.message || "Unable to process uploaded documents."
-      });
-    });
+    if (!error) return next();
+    respondToUploadError(error, res, "Each document must be 5 MB or smaller.");
   });
 }
 
@@ -142,117 +139,114 @@ function parseReplacementDocument(req, res, next) {
         res.status(400).json({ error: "Choose a replacement document to upload." });
         return;
       }
-      fs.promises.chmod(req.file.path, 0o600).then(
-        () => next(),
-        async (chmodError) => {
-          await removeUploadedFiles([req.file]);
-          console.error("Unable to secure replacement tutor application document permissions:", chmodError);
-          res.status(500).json({ error: "Unable to securely store the replacement document." });
-        }
-      );
+      next();
       return;
     }
-    removeUploadedFiles(req.file ? [req.file] : []).finally(() => {
-      const status = error instanceof multer.MulterError ? 400 : error.statusCode || 500;
-      res.status(status).json({
-        error: error.code === "LIMIT_FILE_SIZE"
-          ? "The replacement document must be 5 MB or smaller."
-          : error.message || "Unable to process the replacement document."
-      });
-    });
+    respondToUploadError(error, res, "The replacement document must be 5 MB or smaller.");
   });
 }
 
-function getRequestFiles(req) {
-  if (req.file) return [req.file];
-  return Object.values(req.files || {}).flat();
-}
-
 async function validateFileSignature(file) {
-  const handle = await fs.promises.open(file.path, "r");
-  try {
-    const header = Buffer.alloc(8);
-    const { bytesRead } = await handle.read(header, 0, header.length, 0);
-    const signature = header.subarray(0, bytesRead);
-    const extension = path.extname(file.originalname).toLowerCase();
-    const valid = extension === ".pdf"
-      ? signature.subarray(0, 5).toString("ascii") === "%PDF-"
-      : extension === ".png"
-        ? signature.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
-        : extension === ".jpg" || extension === ".jpeg"
-          ? signature.length >= 3 && signature[0] === 0xff && signature[1] === 0xd8 && signature[2] === 0xff
-          : false;
-    if (!valid) {
-      const error = new Error("The file contents do not match the selected document type.");
-      error.statusCode = 415;
-      throw error;
-    }
-  } finally {
-    await handle.close();
+  const header = file.buffer.subarray(0, 8);
+  const extension = file.originalname.split(/[\\/]/).pop().toLowerCase();
+  const suffix = extension.slice(extension.lastIndexOf("."));
+  const valid = suffix === ".pdf"
+    ? header.subarray(0, 5).toString("ascii") === "%PDF-"
+    : suffix === ".png"
+      ? header.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+      : suffix === ".jpg" || suffix === ".jpeg"
+        ? header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff
+        : false;
+  if (!valid) {
+    const error = new Error("The file contents do not match the selected document type.");
+    error.statusCode = 415;
+    throw error;
   }
 }
 
 function getDocumentMetadata(file) {
-  const originalName = file.originalname
-    .split(/[\\/]/)
-    .pop()
+  const baseName = file.originalname.split(/[\\/]/).pop();
+  const extension = baseName.slice(baseName.lastIndexOf(".")).toLowerCase();
+  const originalName = baseName
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .trim()
-    .slice(0, 255);
-  const extension = path.extname(file.originalname).toLowerCase();
+    .slice(0, 255) || `document${extension}`;
   return {
-    storageKey: path.basename(file.filename),
-    originalName: originalName || `document${extension}`,
+    storageKey: `${randomUUID()}${extension}`,
+    originalName,
     mimeType: MIME_BY_EXTENSION[extension],
     sizeBytes: file.size
   };
 }
 
-function getStoredDocumentPath(storageKey) {
-  const directory = getPrivateUploadDirectory();
-  if (!directory) {
-    const error = new Error("Private document storage is unavailable.");
-    error.statusCode = 503;
-    throw error;
-  }
+function validateStorageKey(storageKey) {
   if (typeof storageKey !== "string" || !/^[0-9a-f-]{36}\.(pdf|jpg|jpeg|png)$/i.test(storageKey)) {
     throw new Error("Invalid stored document reference.");
   }
-  return path.join(directory, storageKey);
+  return storageKey;
+}
+
+async function storeUploadedDocument(file) {
+  const configuration = getStorageConfiguration();
+  const metadata = getDocumentMetadata(file);
+  file.storageKey = metadata.storageKey;
+  await performStorageOperation("upload", () => getSupabaseClient(configuration)
+    .storage
+    .from(configuration.bucket)
+    .upload(metadata.storageKey, file.buffer, {
+      contentType: metadata.mimeType,
+      upsert: false
+    }));
+  return metadata;
+}
+
+async function getSignedDocumentUrl(storageKey, downloadName) {
+  const key = validateStorageKey(storageKey);
+  const configuration = getStorageConfiguration();
+  const result = await performStorageOperation("signed-url", () => getSupabaseClient(configuration)
+    .storage
+    .from(configuration.bucket)
+    .createSignedUrl(key, SIGNED_URL_EXPIRY_SECONDS, { download: downloadName }));
+  if (typeof result?.signedUrl !== "string" || !result.signedUrl) {
+    throw createStorageOperationError("signed-url");
+  }
+  return result.signedUrl;
+}
+
+async function removeStoredDocument(storageKey) {
+  const key = validateStorageKey(storageKey);
+  const configuration = getStorageConfiguration();
+  await performStorageOperation("delete", () => getSupabaseClient(configuration)
+    .storage
+    .from(configuration.bucket)
+    .remove([key]));
 }
 
 async function removeUploadedFiles(files) {
   const uploadedFiles = Array.isArray(files) ? files : Object.values(files || {}).flat();
   for (const file of uploadedFiles) {
+    if (!file?.storageKey) continue;
     try {
-      await fs.promises.unlink(file.path);
+      await removeStoredDocument(file.storageKey);
     } catch (error) {
-      if (error.code !== "ENOENT") {
-        console.error("Unable to remove an unreferenced tutor application document:", error);
-      }
+      console.error("Unable to remove an unreferenced tutor application document.", {
+        operation: error.storageOperation || "delete"
+      });
     }
-  }
-}
-
-async function removeStoredDocument(storageKey) {
-  try {
-    await fs.promises.unlink(getStoredDocumentPath(storageKey));
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
   }
 }
 
 module.exports = {
   MAX_DOCUMENT_BYTES,
-  ensurePrivateUploadDirectory,
   getDocumentMetadata,
-  getPrivateUploadDirectory,
-  getStoredDocumentPath,
+  getSignedDocumentUrl,
+  hasPrivateDocumentStorageConfiguration,
   parseApplicationDocuments,
   parseReplacementDocument,
   requirePrivateDocumentStorage,
   requirePrivateStorageForApproval,
   removeStoredDocument,
   removeUploadedFiles,
+  storeUploadedDocument,
   validateFileSignature
 };

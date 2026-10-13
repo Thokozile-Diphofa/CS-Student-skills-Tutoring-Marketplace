@@ -105,15 +105,19 @@ Implemented tutor application routes:
 - `GET /api/tutor-applications/me` (authenticated; returns only the current applicant's application and safe document metadata/status)
 - `POST /api/tutor-applications` (authenticated; requires `STUDENT`; multipart submission requiring registration proof and academic record, each PDF/JPG/JPEG/PNG and at most 5 MiB)
 - `PUT /api/tutor-applications/me/documents/:type` (authenticated; requires `STUDENT`; applicant may replace only their own rejected `registration` or `academicRecord` document; replacement status returns to `PENDING`)
-- `GET /api/tutor-applications/:id/documents/:type` (authenticated; owning applicant or `ADMIN`; streams a private document after server-side authorization)
+- `GET /api/tutor-applications/:id/documents/:type` (authenticated; owning applicant or `ADMIN`; redirects to a short-lived signed URL only after server-side authorization)
 - `PATCH /api/tutor-applications/:id/documents/:type/review` (authenticated; requires `ADMIN`; verifies or rejects one document, requiring a reason on rejection; administrators cannot verify their own documents)
 - `GET /api/tutor-applications` (authenticated; requires `ADMIN`)
 - `PATCH /api/tutor-applications/:id/review` (authenticated; requires `ADMIN`; application approval is refused unless the latest registration and academic-record documents are both `VERIFIED`)
 
-Tutor application files are stored outside public/static paths. In production, configure
-`PRIVATE_UPLOAD_DIR` to an absolute path on a Render persistent disk; the Render operator
-must provision and mount that disk, which may incur Render charges. Local development uses
-`server/private-documents/`, which is git-ignored.
+Tutor application documents are stored in the private Supabase Storage bucket
+`tutor-documents`. Configure `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SUPABASE_BUCKET`
+on the Render API service only. Keep the Supabase secret key out of the frontend, source
+code, Git, logs, and client-visible responses. The API stores only opaque object keys in
+PostgreSQL and creates a five-minute signed URL only after server-side authorization; it
+does not make the bucket public or store documents on the Render filesystem. Without all
+three settings, the API starts but document operations fail with HTTP 503. Local tests
+mock Supabase Storage.
 
 Implemented admin dashboard route:
 - `GET /api/admin/dashboard` (authenticated; requires `ADMIN`; returns overview counts, safe user records, and approved tutor profiles)
